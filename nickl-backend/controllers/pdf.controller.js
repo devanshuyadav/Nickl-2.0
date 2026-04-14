@@ -1,4 +1,6 @@
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+const Transaction = require('../models/Transaction');
+const Holding = require('../models/Holding');
 
 const processContractNote = async (req, res) => {
     try {
@@ -11,10 +13,9 @@ const processContractNote = async (req, res) => {
             return res.status(500).json({ error: 'PDF_PASSWORD is not set in your .env file.' });
         }
 
-        // Convert Multer's Node Buffer into a Uint8Array for Mozilla's engine
         const dataBuffer = new Uint8Array(req.file.buffer);
 
-        // Step 1: Bypassing wrappers and cracking AES-256 directly
+        // Bypassing wrappers and cracking AES-256 directly
         const loadingTask = pdfjsLib.getDocument({
             data: dataBuffer,
             password: panPassword,
@@ -24,7 +25,7 @@ const processContractNote = async (req, res) => {
         const pdfDocument = await loadingTask.promise;
         let fullText = "";
 
-        // Step 2: Extract text from all pages
+        // Extract text from all pages
         for (let i = 1; i <= pdfDocument.numPages; i++) {
             const page = await pdfDocument.getPage(i);
             const textContent = await page.getTextContent();
@@ -32,16 +33,13 @@ const processContractNote = async (req, res) => {
             fullText += pageText + "\n";
         }
 
-        // Step 3: Parsing the Groww 14-Column Table
-        const extractedTrades = [];
+        // Extract Trade Date from the text
+        const dateMatch = fullText.match(/Trade Date\s+(\d{2}-\d{2}-\d{4})/i);
+        const tradeDateStr = dateMatch ? dateMatch[1].split('-').reverse().join('-') : null;
+        const tradeDate = tradeDateStr ? new Date(tradeDateStr) : new Date();
 
-        /* REGEX BREAKDOWN:
-          1: ISIN (e.g., INE242A01010)
-          2: Name (e.g., INDIAN OIL CORP LTD)
-          3-7: Buy Qty, Buy WAP, Buy Brk, Buy WAP+Brk, Buy Total
-          8-12: Sell Qty, Sell WAP, Sell Brk, Sell WAP+Brk, Sell Total
-          13-14: Net Qty, Net Amount
-        */
+        // Parse trades using Regex
+        const extractedTrades = [];
         const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&]+?)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([-\d.]+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([-\d.]+)\s+([-\d]+)\s+([-\d.]+)/g;
 
         let match;
@@ -50,53 +48,118 @@ const processContractNote = async (req, res) => {
             const symbol = match[2].trim();
 
             const buyQty = parseInt(match[3], 10);
-            const buyPrice = parseFloat(match[4]);
-            const buyBrokerage = parseFloat(match[5]);
-
-            const sellQty = parseInt(match[8], 10);
-            const sellPrice = parseFloat(match[9]);
-            const sellBrokerage = parseFloat(match[10]);
-
-            // If Buy Quantity is greater than 0, push a BUY object
             if (buyQty > 0) {
                 extractedTrades.push({
-                    isin: isin,
-                    symbol: symbol,
-                    type: 'BUY',
+                    isin, symbol, type: 'BUY',
                     quantity: buyQty,
-                    price: buyPrice,
-                    brokerage: buyBrokerage,
-                    totalValue: parseFloat(match[7])
+                    price: parseFloat(match[4]),
+                    brokerage: parseFloat(match[5]),
+                    // Using Math.abs() to keep DB values positive/clean
+                    totalValue: Math.abs(parseFloat(match[7]))
                 });
             }
 
-            // If Sell Quantity is greater than 0, push a SELL object
-            // Note: If you do intraday, BOTH if-statements trigger, perfectly capturing both sides of the trade.
+            const sellQty = parseInt(match[8], 10);
             if (sellQty > 0) {
                 extractedTrades.push({
-                    isin: isin,
-                    symbol: symbol,
-                    type: 'SELL',
+                    isin, symbol, type: 'SELL',
                     quantity: sellQty,
-                    price: sellPrice,
-                    brokerage: sellBrokerage,
-                    totalValue: parseFloat(match[12])
+                    price: parseFloat(match[9]),
+                    brokerage: parseFloat(match[10]),
+                    totalValue: Math.abs(parseFloat(match[12]))
                 });
+            }
+        }
+
+        // Process Database Updates and FIFO Calculation
+        // We process sequentially to maintain accurate database state
+        for (const trade of extractedTrades) {
+            if (trade.type === 'BUY') {
+                // 1. Save the transaction. remainingQuantity equals total bought initially.
+                await Transaction.create({
+                    ...trade,
+                    tradeDate,
+                    remainingQuantity: trade.quantity
+                });
+
+                // 2. Update or Create Holding
+                const holding = await Holding.findOne({ isin: trade.isin });
+                if (holding) {
+                    holding.currentQuantity += trade.quantity;
+                    holding.totalInvested += trade.totalValue;
+                    holding.averageBuyPrice = holding.totalInvested / holding.currentQuantity;
+                    await holding.save();
+                } else {
+                    await Holding.create({
+                        isin: trade.isin,
+                        symbol: trade.symbol,
+                        currentQuantity: trade.quantity,
+                        totalInvested: trade.totalValue,
+                        averageBuyPrice: trade.totalValue / trade.quantity
+                    });
+                }
+
+            } else if (trade.type === 'SELL') {
+                let qtyToSell = trade.quantity;
+                let totalCostOfSoldShares = 0;
+
+                // 1. Fetch past BUYs for this specific stock that haven't been fully sold yet
+                const availableBuys = await Transaction.find({
+                    isin: trade.isin,
+                    type: 'BUY',
+                    remainingQuantity: { $gt: 0 }
+                }).sort({ tradeDate: 1, createdAt: 1 }); // Oldest first for true FIFO
+
+                // 2. Deduct shares from oldest buys until the sell order is fulfilled
+                for (const buy of availableBuys) {
+                    if (qtyToSell === 0) break;
+
+                    const qtyFromThisBuy = Math.min(qtyToSell, buy.remainingQuantity);
+
+                    // Calculate the exact cost of the shares we are selling right now
+                    const costRatio = qtyFromThisBuy / buy.quantity;
+                    totalCostOfSoldShares += (buy.totalValue * costRatio);
+
+                    buy.remainingQuantity -= qtyFromThisBuy;
+                    await buy.save();
+
+                    qtyToSell -= qtyFromThisBuy;
+                }
+
+                // 3. Save the SELL transaction
+                await Transaction.create({ ...trade, tradeDate, remainingQuantity: 0 });
+
+                // 4. Calculate P&L and update Holdings
+                const realizedPnL = trade.totalValue - totalCostOfSoldShares;
+
+                const holding = await Holding.findOne({ isin: trade.isin });
+                if (holding) {
+                    holding.currentQuantity -= trade.quantity;
+                    // We remove the original cost of these specific shares from totalInvested
+                    holding.totalInvested -= totalCostOfSoldShares;
+                    holding.realizedPnL += realizedPnL;
+
+                    // Prevent NaN if all shares are sold
+                    holding.averageBuyPrice = holding.currentQuantity > 0
+                        ? (holding.totalInvested / holding.currentQuantity)
+                        : 0;
+
+                    await holding.save();
+                }
             }
         }
 
         res.status(200).json({
-            message: 'Contract Note processed successfully',
+            message: 'Contract Note processed, P&L calculated, and database updated successfully',
+            tradeDate: tradeDate,
             tradeCount: extractedTrades.length,
-            trades: extractedTrades
+            tradesProcessed: extractedTrades
         });
 
     } catch (error) {
-        // pdfjs throws a specific error name when the password fails
         if (error.name === 'PasswordException') {
             return res.status(401).json({ error: 'Incorrect PDF password in .env file.' });
         }
-
         console.error('Processing Error:', error);
         res.status(500).json({ error: 'Internal server error during processing.' });
     }
