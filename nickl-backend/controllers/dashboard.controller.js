@@ -1,4 +1,5 @@
 const Holding = require('../models/Holding');
+const Transaction = require('../models/Transaction');
 
 const getPortfolio = async (req, res) => {
     try {
@@ -32,4 +33,19 @@ const getPortfolio = async (req, res) => {
     }
 };
 
-module.exports = { getPortfolio };
+const getStockTransactions = async (req, res) => {
+    try {
+        const { isin } = req.params;
+
+        // Fetch all transactions for this stock, newest first
+        const transactions = await Transaction.find({ isin })
+            .sort({ tradeDate: -1, createdAt: -1 });
+
+        res.status(200).json({ transactions });
+    } catch (error) {
+        console.error('Transaction Fetch Error:', error);
+        res.status(500).json({ error: 'Failed to fetch transaction history.' });
+    }
+};
+
+module.exports = { getPortfolio, getStockTransactions };
