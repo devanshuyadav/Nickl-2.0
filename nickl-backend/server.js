@@ -17,6 +17,8 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 const uploadRoutes = require('./routes/upload.routes');
 app.use('/api/upload', uploadRoutes);
+const dashboardRoutes = require('./routes/dashboard.routes');
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
