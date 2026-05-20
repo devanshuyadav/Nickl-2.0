@@ -21,7 +21,9 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'Nickl Server v2 is alive and well.' });
 });
 
-// We will mount the PDF upload routes here later
+//PDF upload routes
+const uploadRoutes = require('./routes/upload.routes');
+app.use('/api/upload', uploadRoutes);
 
 const PORT = process.env.PORT || 5000;
 
