@@ -49,33 +49,35 @@ const processContractNote = async (req, res) => {
         const extractedTrades = [];
         let dailyTurnover = 0; // We need this to apportion taxes fairly
 
-        const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&]+?)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([-\d.]+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([-\d.]+)\s+([-\d]+)\s+([-\d.]+)/g;
+        // UPDATED REGEX: Added `-?` to all number fields so it catches negative quantities and amounts without breaking the layout
+        const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&]+?)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)/g;
 
         let match;
         while ((match = tradeRegex.exec(fullText)) !== null) {
             const isin = match[1];
             const symbol = match[2].trim();
 
-            const buyQty = parseInt(match[3], 10);
+            // We use Math.abs() because a sell of "-7" means 7 shares were sold. We want positive integers in the DB.
+            const buyQty = Math.abs(parseInt(match[3], 10));
             if (buyQty > 0) {
                 const value = Math.abs(parseFloat(match[7]));
                 dailyTurnover += value;
                 extractedTrades.push({
                     isin, symbol, type: 'BUY', quantity: buyQty,
-                    price: parseFloat(match[4]),
-                    brokerage: parseFloat(match[5]) * buyQty, // Brokerage is usually per share in the table
+                    price: Math.abs(parseFloat(match[4])),
+                    brokerage: Math.abs(parseFloat(match[5])) * buyQty,
                     totalValue: value
                 });
             }
 
-            const sellQty = parseInt(match[8], 10);
+            const sellQty = Math.abs(parseInt(match[8], 10));
             if (sellQty > 0) {
                 const value = Math.abs(parseFloat(match[12]));
                 dailyTurnover += value;
                 extractedTrades.push({
                     isin, symbol, type: 'SELL', quantity: sellQty,
-                    price: parseFloat(match[9]),
-                    brokerage: parseFloat(match[10]) * sellQty,
+                    price: Math.abs(parseFloat(match[9])),
+                    brokerage: Math.abs(parseFloat(match[10])) * sellQty,
                     totalValue: value
                 });
             }
