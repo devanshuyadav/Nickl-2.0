@@ -67,7 +67,8 @@ const processContractNote = async (req, res) => {
         let totalBrokerage = 0;
         let payInPayOut = 0; // Pure cash flow tracker
 
-        const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&]+?)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)/g;
+        // UPDATED REGEX: Added \(\)\', to safely capture parentheses, apostrophes, and commas in company names
+        const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&\(\)\',]+?)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)/g;
 
         let match;
         while ((match = tradeRegex.exec(fullText)) !== null) {
@@ -102,7 +103,7 @@ const processContractNote = async (req, res) => {
 
                 dailyTurnover += grossValue;
                 totalBrokerage += tradeBrokerage;
-                payInPayOut += grossValue; // Cash enters your account (+)
+                payInPayOut += grossValue;
 
                 extractedTrades.push({
                     isin, symbol, type: 'SELL', quantity: sellQty,
@@ -141,7 +142,6 @@ const processContractNote = async (req, res) => {
             };
         });
 
-        // The ultimate daily cash settlement figure
         const netAmount = Number((payInPayOut - totalBrokerage - totalSTT - totalOtherTaxes).toFixed(2));
 
         res.status(200).json({
