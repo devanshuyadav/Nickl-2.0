@@ -1,20 +1,15 @@
 const express = require('express');
-const multer = require('multer');
-const { processContractNote } = require('../controllers/pdf.controller');
-
 const router = express.Router();
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
-// Store the PDF temporarily in RAM
-const storage = multer.memoryStorage();
-const upload = multer({
-    storage,
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'application/pdf') cb(null, true);
-        else cb(new Error('Only PDF files are allowed!'), false);
-    }
-});
+const { extractContractNote } = require('../controllers/pdf.controller');
+const { executeTrades } = require('../controllers/trade.controller');
 
-// The endpoint will expect a form-data field named 'contractNote'
-router.post('/contract-note', upload.single('contractNote'), processContractNote);
+// 1. PDF goes in, JSON array of trades comes out (No DB mutation)
+router.post('/extract-pdf', upload.single('contractNote'), extractContractNote);
+
+// 2. Finalized JSON array goes in, DB updates happen (FIFO magic)
+router.post('/execute-trades', executeTrades);
 
 module.exports = router;
