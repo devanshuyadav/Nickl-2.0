@@ -29,12 +29,18 @@ const processContractNote = async (req, res) => {
         const tradeDateStr = dateMatch ? dateMatch[1].split('-').reverse().join('-') : null;
         const tradeDate = tradeDateStr ? new Date(tradeDateStr) : new Date();
 
-        // 3. Bulletproof Tax Extraction (Chunking Method)
+        // 3. Bulletproof Tax Extraction (Chunking Method with Sanitization)
+
+        // We strip out Groww's GST explanatory parentheses so they don't trigger false positives 
+        // when we search for keywords like "SEBI Turnover Fees" or "Exchange transaction charges".
+        const sanitizedText = fullText.replace(/\(\d+% on Brokerage.*?\)/gi, '');
+
         const getTax = (keyword) => {
-            const index = fullText.toLowerCase().indexOf(keyword.toLowerCase());
+            // Search against the cleaned text
+            const index = sanitizedText.toLowerCase().indexOf(keyword.toLowerCase());
             if (index === -1) return 0;
 
-            const chunk = fullText.substring(index + keyword.length, index + keyword.length + 150);
+            const chunk = sanitizedText.substring(index + keyword.length, index + keyword.length + 150);
             const numRegex = /[-]?\d+(?:\.\d+)?(?!\s*%)/g;
             const nums = chunk.match(numRegex);
 
@@ -107,19 +113,15 @@ const processContractNote = async (req, res) => {
 
         // 5. Apportion Taxes & Calculate Final NET VALUE
         const processedTrades = extractedTrades.map(trade => {
-            // Find the trade's specific weight for the day
             const proportion = dailyTurnover > 0 ? (trade.grossValue / dailyTurnover) : 0;
 
             const apportionedSTT = Number((totalSTT * proportion).toFixed(2));
             const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
 
-            // Calculate the fully loaded Net Value
             let netValue = 0;
             if (trade.type === 'BUY') {
-                // Buy Cost = Gross Price + Brokerage + Taxes
                 netValue = trade.grossValue + trade.brokerage + apportionedSTT + apportionedOtherTaxes;
             } else {
-                // Sell Revenue = Gross Price - Brokerage - Taxes
                 netValue = trade.grossValue - trade.brokerage - apportionedSTT - apportionedOtherTaxes;
             }
 
@@ -138,7 +140,7 @@ const processContractNote = async (req, res) => {
         });
 
         res.status(200).json({
-            message: 'Plan B: Taxes Apportioned & Net Values Calculated',
+            message: 'Plan B: Taxes Apportioned & Net Values Calculated (Collision Fixed)',
             tradeDate,
             summary: {
                 dailyTurnover: Number(dailyTurnover.toFixed(2)),
