@@ -36,7 +36,6 @@ const processContractNote = async (req, res) => {
         const sanitizedText = fullText.replace(/\(\d+% on Brokerage.*?\)/gi, '');
 
         const getTax = (keyword) => {
-            // Search against the cleaned text
             const index = sanitizedText.toLowerCase().indexOf(keyword.toLowerCase());
             if (index === -1) return 0;
 
@@ -62,10 +61,11 @@ const processContractNote = async (req, res) => {
 
         const totalOtherTaxes = Number((exchangeCharges + sebiFees + stampDuty + cgst + sgst + igst + ipftCharges + utt).toFixed(2));
 
-        // 4. Parse Individual Trades & Find Daily Turnover
+        // 4. Parse Individual Trades, Find Daily Turnover & Cash Flow
         const extractedTrades = [];
         let dailyTurnover = 0;
         let totalBrokerage = 0;
+        let payInPayOut = 0; // Pure cash flow tracker
 
         const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&]+?)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)/g;
 
@@ -83,6 +83,7 @@ const processContractNote = async (req, res) => {
 
                 dailyTurnover += grossValue;
                 totalBrokerage += tradeBrokerage;
+                payInPayOut -= grossValue; // Cash leaves your account (-)
 
                 extractedTrades.push({
                     isin, symbol, type: 'BUY', quantity: buyQty,
@@ -101,6 +102,7 @@ const processContractNote = async (req, res) => {
 
                 dailyTurnover += grossValue;
                 totalBrokerage += tradeBrokerage;
+                payInPayOut += grossValue; // Cash enters your account (+)
 
                 extractedTrades.push({
                     isin, symbol, type: 'SELL', quantity: sellQty,
@@ -139,14 +141,19 @@ const processContractNote = async (req, res) => {
             };
         });
 
+        // The ultimate daily cash settlement figure
+        const netAmount = Number((payInPayOut - totalBrokerage - totalSTT - totalOtherTaxes).toFixed(2));
+
         res.status(200).json({
-            message: 'Plan B: Taxes Apportioned & Net Values Calculated (Collision Fixed)',
+            message: 'Plan B: Taxes Apportioned & Net Values Calculated',
             tradeDate,
             summary: {
                 dailyTurnover: Number(dailyTurnover.toFixed(2)),
+                payInPayOut: Number(payInPayOut.toFixed(2)),
                 totalBrokerage: Number(totalBrokerage.toFixed(2)),
                 totalSTT,
-                totalOtherTaxes
+                totalOtherTaxes,
+                netAmount
             },
             transactions: processedTrades
         });
