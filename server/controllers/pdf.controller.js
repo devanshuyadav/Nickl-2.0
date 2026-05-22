@@ -29,27 +29,38 @@ const processContractNote = async (req, res) => {
         const tradeDateStr = dateMatch ? dateMatch[1].split('-').reverse().join('-') : null;
         const tradeDate = tradeDateStr ? new Date(tradeDateStr) : new Date();
 
-        // 3. Parse Aggregate Taxes from the bottom of the PDF
-        const getTax = (regex) => {
-            const match = fullText.match(regex);
-            return match ? parseFloat(match[1].replace(/,/g, '')) : 0;
+        // 3. Bulletproof Tax Extraction (Chunking Method)
+        const getTax = (keyword) => {
+            const index = fullText.toLowerCase().indexOf(keyword.toLowerCase());
+            if (index === -1) return 0;
+
+            const chunk = fullText.substring(index + keyword.length, index + keyword.length + 150);
+            const numRegex = /[-]?\d+(?:\.\d+)?(?!\s*%)/g;
+            const nums = chunk.match(numRegex);
+
+            if (nums && nums.length > 0) {
+                return Math.abs(parseFloat(nums[0].replace(/,/g, '')));
+            }
+            return 0;
         };
 
-        const totalSTT = getTax(/Securities Transaction Tax.*?([\d.]+)/i);
-        const exchangeCharges = getTax(/Exchange Transaction Charges.*?([\d.]+)/i);
-        const sebiFees = getTax(/SEBI Turnover Fees.*?([\d.]+)/i);
-        const stampDuty = getTax(/Stamp Duty.*?([\d.]+)/i);
-        const cgst = getTax(/CGST.*?([\d.]+)/i);
-        const sgst = getTax(/SGST.*?([\d.]+)/i);
-        const igst = getTax(/IGST.*?([\d.]+)/i);
+        const totalSTT = getTax('Securities Transaction Tax');
+        const exchangeCharges = getTax('Exchange Transaction Charges');
+        const sebiFees = getTax('SEBI Turnover Fees');
+        const stampDuty = getTax('Stamp Duty');
+        const cgst = getTax('CGST');
+        const sgst = getTax('SGST');
+        const igst = getTax('IGST');
+        const ipftCharges = getTax('IPFT Charges');
+        const utt = getTax('UTT');
 
-        const totalOtherTaxes = exchangeCharges + sebiFees + stampDuty + cgst + sgst + igst;
+        const totalOtherTaxes = Number((exchangeCharges + sebiFees + stampDuty + cgst + sgst + igst + ipftCharges + utt).toFixed(2));
 
-        // 4. Parse Individual Trades
+        // 4. Parse Individual Trades & Find Daily Turnover
         const extractedTrades = [];
-        let dailyTurnover = 0; // We need this to apportion taxes fairly
+        let dailyTurnover = 0;
+        let totalBrokerage = 0;
 
-        // UPDATED REGEX: Added `-?` to all number fields so it catches negative quantities and amounts without breaking the layout
         const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&]+?)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)/g;
 
         let match;
@@ -57,64 +68,85 @@ const processContractNote = async (req, res) => {
             const isin = match[1];
             const symbol = match[2].trim();
 
-            // We use Math.abs() because a sell of "-7" means 7 shares were sold. We want positive integers in the DB.
+            // BUY Trades
             const buyQty = Math.abs(parseInt(match[3], 10));
             if (buyQty > 0) {
-                const value = Math.abs(parseFloat(match[7]));
-                dailyTurnover += value;
+                const valueIncludesBrokerage = Math.abs(parseFloat(match[7]));
+                const tradeBrokerage = Math.abs(parseFloat(match[5])) * buyQty;
+                const grossValue = valueIncludesBrokerage - tradeBrokerage;
+
+                dailyTurnover += grossValue;
+                totalBrokerage += tradeBrokerage;
+
                 extractedTrades.push({
                     isin, symbol, type: 'BUY', quantity: buyQty,
                     price: Math.abs(parseFloat(match[4])),
-                    brokerage: Math.abs(parseFloat(match[5])) * buyQty,
-                    totalValue: value
+                    brokerage: Number(tradeBrokerage.toFixed(4)),
+                    grossValue: grossValue
                 });
             }
 
+            // SELL Trades
             const sellQty = Math.abs(parseInt(match[8], 10));
             if (sellQty > 0) {
-                const value = Math.abs(parseFloat(match[12]));
-                dailyTurnover += value;
+                const valueIncludesBrokerage = Math.abs(parseFloat(match[12]));
+                const tradeBrokerage = Math.abs(parseFloat(match[10])) * sellQty;
+                const grossValue = valueIncludesBrokerage + tradeBrokerage;
+
+                dailyTurnover += grossValue;
+                totalBrokerage += tradeBrokerage;
+
                 extractedTrades.push({
                     isin, symbol, type: 'SELL', quantity: sellQty,
                     price: Math.abs(parseFloat(match[9])),
-                    brokerage: Math.abs(parseFloat(match[10])) * sellQty,
-                    totalValue: value
+                    brokerage: Number(tradeBrokerage.toFixed(4)),
+                    grossValue: grossValue
                 });
             }
         }
 
-        // 5. Apportion Taxes & Format Final Output
+        // 5. Apportion Taxes & Calculate Final NET VALUE
         const processedTrades = extractedTrades.map(trade => {
-            // Find this trade's percentage of the day's total volume
-            const proportion = dailyTurnover > 0 ? (trade.totalValue / dailyTurnover) : 0;
+            // Find the trade's specific weight for the day
+            const proportion = dailyTurnover > 0 ? (trade.grossValue / dailyTurnover) : 0;
 
             const apportionedSTT = Number((totalSTT * proportion).toFixed(2));
             const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
 
-            // Calculate Final Net Value
-            // Buy = Debited (Cost + Taxes) | Sell = Credited (Revenue - Taxes)
+            // Calculate the fully loaded Net Value
             let netValue = 0;
             if (trade.type === 'BUY') {
-                netValue = trade.totalValue + trade.brokerage + apportionedSTT + apportionedOtherTaxes;
+                // Buy Cost = Gross Price + Brokerage + Taxes
+                netValue = trade.grossValue + trade.brokerage + apportionedSTT + apportionedOtherTaxes;
             } else {
-                netValue = trade.totalValue - trade.brokerage - apportionedSTT - apportionedOtherTaxes;
+                // Sell Revenue = Gross Price - Brokerage - Taxes
+                netValue = trade.grossValue - trade.brokerage - apportionedSTT - apportionedOtherTaxes;
             }
 
             return {
-                ...trade,
+                isin: trade.isin,
+                symbol: trade.symbol,
                 tradeDate,
+                type: trade.type,
+                quantity: trade.quantity,
+                price: trade.price,
+                brokerage: trade.brokerage,
                 stt: apportionedSTT,
                 otherTaxes: apportionedOtherTaxes,
                 netValue: Number(netValue.toFixed(2))
             };
         });
 
-        // We are just returning JSON for now to verify the math!
         res.status(200).json({
-            message: 'Phase 1: PDF Extracted and Taxes Calculated',
+            message: 'Plan B: Taxes Apportioned & Net Values Calculated',
             tradeDate,
-            summaryTaxes: { totalSTT, totalOtherTaxes, dailyTurnover },
-            tradesProcessed: processedTrades
+            summary: {
+                dailyTurnover: Number(dailyTurnover.toFixed(2)),
+                totalBrokerage: Number(totalBrokerage.toFixed(2)),
+                totalSTT,
+                totalOtherTaxes
+            },
+            transactions: processedTrades
         });
 
     } catch (error) {
