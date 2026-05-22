@@ -14,6 +14,7 @@ const transactionSchema = new mongoose.Schema({
     stt: { type: Number, default: 0 },
     otherTaxes: { type: Number, default: 0 },
 
+    grossValue: { type: Number },
     // The Fully Loaded Value:
     // BUY = (Qty * Price) + Brokerage + STT + Other Taxes
     // SELL = (Qty * Price) - Brokerage - STT - Other Taxes

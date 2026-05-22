@@ -1,3 +1,5 @@
+const Transaction = require('../models/Transaction');
+const Holding = require('../models/Holding');
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
 const processContractNote = async (req, res) => {
@@ -154,6 +156,7 @@ const processContractNote = async (req, res) => {
                 stt: apportionedSTT,
                 otherTaxes: apportionedOtherTaxes,
                 dpCharges: apportionedDp,
+                grossValue: trade.grossValue,
                 netValue: Number(netValue.toFixed(2))
             };
         });
@@ -164,20 +167,108 @@ const processContractNote = async (req, res) => {
         // 2. The True Cash Flow (Main Page - DP Charges from the Annexure)
         const finalNetCashFlow = Number((netAmountReceivablePayable - totalDpCharges).toFixed(2));
 
+        // --- PHASE 2: The FIFO Execution Engine & Database Save ---
+        for (const trade of processedTrades) {
+            // 1. Find or create the master Holding scoreboard for this stock
+            let holding = await Holding.findOne({ isin: trade.isin });
+            if (!holding) {
+                holding = new Holding({ isin: trade.isin, symbol: trade.symbol });
+            }
+
+            if (trade.type === 'BUY') {
+                // Save the BUY transaction
+                const newTx = new Transaction({
+                    ...trade,
+                    remainingQuantity: trade.quantity // These shares are now in the queue
+                });
+                await newTx.save();
+
+                // Update the master Holding
+                holding.currentQuantity += trade.quantity;
+                holding.totalInvested += trade.netValue; // Fully loaded cost
+                holding.averageBuyPrice = holding.totalInvested / holding.currentQuantity;
+
+                // Add to fee trackers
+                holding.totalBrokeragePaid += trade.brokerage;
+                holding.totalTaxesPaid += (trade.stt + trade.otherTaxes + trade.dpCharges);
+
+                await holding.save();
+
+            } else if (trade.type === 'SELL') {
+                let sharesToSell = trade.quantity;
+                let totalFullyLoadedCostOfSoldShares = 0;
+                let totalGrossCostOfSoldShares = 0; // Pure share price cost
+
+                // 2. Fetch the FIFO Queue: Oldest BUYs that still have shares left
+                const availableBuys = await Transaction.find({
+                    isin: trade.isin,
+                    type: 'BUY',
+                    remainingQuantity: { $gt: 0 }
+                }).sort({ tradeDate: 1 }); // Ascending order (oldest first)
+
+                // 3. Consume the older shares
+                for (const buy of availableBuys) {
+                    if (sharesToSell === 0) break;
+
+                    const sharesTaken = Math.min(sharesToSell, buy.remainingQuantity);
+
+                    // Calculate the cost basis for ONLY the shares we are taking
+                    const fullyLoadedCostBasis = (buy.netValue / buy.quantity) * sharesTaken;
+                    const grossCostBasis = buy.price * sharesTaken;
+
+                    totalFullyLoadedCostOfSoldShares += fullyLoadedCostBasis;
+                    totalGrossCostOfSoldShares += grossCostBasis;
+
+                    // Deduct from the BUY order and the SELL target
+                    buy.remainingQuantity -= sharesTaken;
+                    sharesToSell -= sharesTaken;
+                    await buy.save();
+                }
+
+                if (sharesToSell > 0) {
+                    console.warn(`WARNING: Sold more shares of ${trade.symbol} than found in database. Possible missing past contract notes.`);
+                }
+
+                // 4. Save the SELL transaction
+                const newTx = new Transaction({
+                    ...trade,
+                    remainingQuantity: 0 // Sell orders don't go into the queue
+                });
+                await newTx.save();
+
+                // 5. Calculate Exact Profit & Loss
+                // Net Profit = (Net Cash Received) - (Net Cash Paid for those specific shares)
+                const realizedNetPnL = trade.netValue - totalFullyLoadedCostOfSoldShares;
+
+                // Gross Profit = (Gross Cash Received) - (Gross Cash Paid for those specific shares)
+                const realizedGrossPnL = trade.grossValue - totalGrossCostOfSoldShares;
+
+                // 6. Update the master Holding scoreboard
+                holding.currentQuantity -= trade.quantity;
+                holding.totalInvested -= totalFullyLoadedCostOfSoldShares; // Remove the cost of sold shares from the pool
+
+                // Prevent average buy price from NaN if quantity hits 0
+                holding.averageBuyPrice = holding.currentQuantity > 0 ? (holding.totalInvested / holding.currentQuantity) : 0;
+
+                holding.realizedNetPnL = Number((holding.realizedNetPnL + realizedNetPnL).toFixed(2));
+                holding.realizedGrossPnL = Number((holding.realizedGrossPnL + realizedGrossPnL).toFixed(2));
+
+                holding.totalBrokeragePaid += trade.brokerage;
+                holding.totalTaxesPaid += (trade.stt + trade.otherTaxes + trade.dpCharges);
+
+                await holding.save();
+            }
+        }
+
         res.status(200).json({
-            message: 'Plan B: Full Apportionment Engine Active',
+            message: 'SUCCESS: Contract Note Processed & Database Updated',
             tradeDate,
             summary: {
-                dailyTurnover: Number(dailyTurnover.toFixed(2)),
-                payInPayOut: Number(payInPayOut.toFixed(2)),
-                totalBrokerage: Number(totalBrokerage.toFixed(2)),
-                totalSTT,
-                totalOtherTaxes,
-                netAmountReceivablePayable, // The Contract Note Bottom Line
-                totalDpCharges,             // The Annexure Fee
-                finalNetCashFlow            // The Combination
+                netAmountReceivablePayable,
+                totalDpCharges,
+                finalNetCashFlow
             },
-            transactions: processedTrades
+            tradesProcessed: processedTrades.length
         });
 
     } catch (error) {
