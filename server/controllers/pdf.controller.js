@@ -29,10 +29,7 @@ const processContractNote = async (req, res) => {
         const tradeDateStr = dateMatch ? dateMatch[1].split('-').reverse().join('-') : null;
         const tradeDate = tradeDateStr ? new Date(tradeDateStr) : new Date();
 
-        // 3. Bulletproof Tax Extraction (Chunking Method with Sanitization)
-
-        // We strip out Groww's GST explanatory parentheses so they don't trigger false positives 
-        // when we search for keywords like "SEBI Turnover Fees" or "Exchange transaction charges".
+        // 3. Bulletproof Tax & Fee Extraction
         const sanitizedText = fullText.replace(/\(\d+% on Brokerage.*?\)/gi, '');
 
         const getTax = (keyword) => {
@@ -61,13 +58,26 @@ const processContractNote = async (req, res) => {
 
         const totalOtherTaxes = Number((exchangeCharges + sebiFees + stampDuty + cgst + sgst + igst + ipftCharges + utt).toFixed(2));
 
-        // 4. Parse Individual Trades, Find Daily Turnover & Cash Flow
+        // 3.5 Extract DP Charges
+        let totalDpCharges = 0;
+        let dpIndex = sanitizedText.toLowerCase().indexOf('cdsl dp charges');
+        if (dpIndex === -1) dpIndex = sanitizedText.toLowerCase().indexOf('groww dp charges');
+
+        if (dpIndex !== -1) {
+            const chunk = sanitizedText.substring(dpIndex, dpIndex + 400);
+            const totalMatch = chunk.match(/Total\s+([\d,]+\.\d+)/i);
+            if (totalMatch) {
+                totalDpCharges = Math.abs(parseFloat(totalMatch[1].replace(/,/g, '')));
+            }
+        }
+
+        // 4. Parse Individual Trades
         const extractedTrades = [];
         let dailyTurnover = 0;
+        let sellTurnover = 0;
         let totalBrokerage = 0;
-        let payInPayOut = 0; // Pure cash flow tracker
+        let payInPayOut = 0;
 
-        // UPDATED REGEX: Added \(\)\', to safely capture parentheses, apostrophes, and commas in company names
         const tradeRegex = /(IN[A-Z0-9]{10})\s+([A-Za-z0-9\s\.\-\&\(\)\',]+?)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?\d+)\s+(-?[\d.]+)/g;
 
         let match;
@@ -84,7 +94,7 @@ const processContractNote = async (req, res) => {
 
                 dailyTurnover += grossValue;
                 totalBrokerage += tradeBrokerage;
-                payInPayOut -= grossValue; // Cash leaves your account (-)
+                payInPayOut -= grossValue;
 
                 extractedTrades.push({
                     isin, symbol, type: 'BUY', quantity: buyQty,
@@ -102,6 +112,7 @@ const processContractNote = async (req, res) => {
                 const grossValue = valueIncludesBrokerage + tradeBrokerage;
 
                 dailyTurnover += grossValue;
+                sellTurnover += grossValue;
                 totalBrokerage += tradeBrokerage;
                 payInPayOut += grossValue;
 
@@ -120,12 +131,16 @@ const processContractNote = async (req, res) => {
 
             const apportionedSTT = Number((totalSTT * proportion).toFixed(2));
             const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
-
+            let apportionedDp = 0;
             let netValue = 0;
+
             if (trade.type === 'BUY') {
                 netValue = trade.grossValue + trade.brokerage + apportionedSTT + apportionedOtherTaxes;
             } else {
-                netValue = trade.grossValue - trade.brokerage - apportionedSTT - apportionedOtherTaxes;
+                const sellProportion = sellTurnover > 0 ? (trade.grossValue / sellTurnover) : 0;
+                apportionedDp = Number((totalDpCharges * sellProportion).toFixed(2));
+
+                netValue = trade.grossValue - trade.brokerage - apportionedSTT - apportionedOtherTaxes - apportionedDp;
             }
 
             return {
@@ -138,14 +153,19 @@ const processContractNote = async (req, res) => {
                 brokerage: trade.brokerage,
                 stt: apportionedSTT,
                 otherTaxes: apportionedOtherTaxes,
+                dpCharges: apportionedDp,
                 netValue: Number(netValue.toFixed(2))
             };
         });
 
-        const netAmount = Number((payInPayOut - totalBrokerage - totalSTT - totalOtherTaxes).toFixed(2));
+        // 1. What the main page of the Contract Note says
+        const netAmountReceivablePayable = Number((payInPayOut - totalBrokerage - totalSTT - totalOtherTaxes).toFixed(2));
+
+        // 2. The True Cash Flow (Main Page - DP Charges from the Annexure)
+        const finalNetCashFlow = Number((netAmountReceivablePayable - totalDpCharges).toFixed(2));
 
         res.status(200).json({
-            message: 'Plan B: Taxes Apportioned & Net Values Calculated',
+            message: 'Plan B: Full Apportionment Engine Active',
             tradeDate,
             summary: {
                 dailyTurnover: Number(dailyTurnover.toFixed(2)),
@@ -153,7 +173,9 @@ const processContractNote = async (req, res) => {
                 totalBrokerage: Number(totalBrokerage.toFixed(2)),
                 totalSTT,
                 totalOtherTaxes,
-                netAmount
+                netAmountReceivablePayable, // The Contract Note Bottom Line
+                totalDpCharges,             // The Annexure Fee
+                finalNetCashFlow            // The Combination
             },
             transactions: processedTrades
         });
