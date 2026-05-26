@@ -4,7 +4,9 @@ const extractContractNote = async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No PDF file uploaded.' });
 
-        const panPassword = process.env.PDF_PASSWORD;
+        // Pull the password from the frontend request!
+        const panPassword = req.body.password || process.env.PDF_PASSWORD;
+
         if (!panPassword) return res.status(500).json({ error: 'PDF_PASSWORD is not set.' });
 
         // 1. Crack the PDF
