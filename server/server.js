@@ -29,6 +29,10 @@ app.use('/api/upload', uploadRoutes);
 const dashboardRoutes = require('./routes/dashboard.routes');
 app.use('/api/portfolio', dashboardRoutes);
 
+// LIVE market data routes
+const marketRoutes = require('./routes/market.routes');
+app.use('/api/market', marketRoutes);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
