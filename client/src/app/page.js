@@ -3,9 +3,10 @@ import { useState } from 'react';
 import FileUploader from '@/components/FileUploader';
 import TradeTable from '@/components/TradeTable';
 import Dashboard from '@/components/Dashboard';
+import Settings from '@/components/Settings';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' or 'upload'
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'upload', or 'settings'
   const [extractedData, setExtractedData] = useState(null);
 
   return (
@@ -19,6 +20,7 @@ export default function Home() {
             <p className="mt-2 text-sm text-gray-500">True fully-loaded FIFO execution tracking.</p>
           </div>
 
+          {/* Updated 3-Button Navigation */}
           <div className="mt-4 md:mt-0 flex space-x-2 bg-gray-200 p-1 rounded-lg">
             <button
               onClick={() => { setActiveTab('dashboard'); setExtractedData(null); }}
@@ -31,6 +33,12 @@ export default function Home() {
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'upload' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
             >
               Upload Trades
+            </button>
+            <button
+              onClick={() => { setActiveTab('settings'); setExtractedData(null); }}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'settings' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600 hover:text-red-600'}`}
+            >
+              Settings
             </button>
           </div>
         </div>
@@ -46,6 +54,16 @@ export default function Home() {
           <TradeTable
             initialData={extractedData}
             onReset={() => setExtractedData(null)}
+          />
+        )}
+
+        {/* 3. The New Settings Component */}
+        {activeTab === 'settings' && (
+          <Settings
+            onResetSuccess={() => {
+              // Automatically switch back to Dashboard after a successful wipe
+              setActiveTab('dashboard');
+            }}
           />
         )}
 

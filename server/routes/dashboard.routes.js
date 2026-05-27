@@ -135,4 +135,16 @@ router.get('/', async (req, res) => {
     }
 });
 
+// DELETE /api/portfolio/reset - Wipe the entire database for testing
+router.delete('/reset', async (req, res) => {
+    try {
+        await Holding.deleteMany({});
+        await Transaction.deleteMany({});
+        res.status(200).json({ message: 'SUCCESS: Portfolio completely wiped.' });
+    } catch (error) {
+        console.error('Reset Error:', error);
+        res.status(500).json({ error: 'Failed to reset portfolio database.' });
+    }
+});
+
 module.exports = router;
