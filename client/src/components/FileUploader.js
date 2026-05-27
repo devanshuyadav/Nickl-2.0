@@ -37,7 +37,7 @@ export default function FileUploader({ onExtractionSuccess }) {
         // but it's good practice for a real app!
 
         try {
-            const response = await fetch('/api/extract-pdf', {
+            const response = await fetch('/api/upload/extract-pdf', {
                 method: 'POST',
                 body: formData,
             });

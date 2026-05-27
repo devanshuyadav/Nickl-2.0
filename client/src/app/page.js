@@ -2,31 +2,53 @@
 import { useState } from 'react';
 import FileUploader from '@/components/FileUploader';
 import TradeTable from '@/components/TradeTable';
+import Dashboard from '@/components/Dashboard';
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' or 'upload'
   const [extractedData, setExtractedData] = useState(null);
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
-            Portfolio Engine
-          </h1>
-          <p className="mt-3 text-lg text-gray-500">
-            Upload contract notes or manually enter trades to update your FIFO ledger.
-          </p>
+
+        {/* Header & Navigation */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-10">
+          <div>
+            <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Portfolio Engine</h1>
+            <p className="mt-2 text-sm text-gray-500">True fully-loaded FIFO execution tracking.</p>
+          </div>
+
+          <div className="mt-4 md:mt-0 flex space-x-2 bg-gray-200 p-1 rounded-lg">
+            <button
+              onClick={() => { setActiveTab('dashboard'); setExtractedData(null); }}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('upload')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'upload' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              Upload Trades
+            </button>
+          </div>
         </div>
 
-        {/* State Machine: If we have data, show the Table. If not, show the Uploader. */}
-        {!extractedData ? (
+        {/* Dynamic Content Rendering */}
+        {activeTab === 'dashboard' && <Dashboard />}
+
+        {activeTab === 'upload' && !extractedData && (
           <FileUploader onExtractionSuccess={(data) => setExtractedData(data)} />
-        ) : (
+        )}
+
+        {activeTab === 'upload' && extractedData && (
           <TradeTable
             initialData={extractedData}
             onReset={() => setExtractedData(null)}
           />
         )}
+
       </div>
     </div>
   );

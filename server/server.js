@@ -25,6 +25,10 @@ app.get('/health', (req, res) => {
 const uploadRoutes = require('./routes/upload.routes');
 app.use('/api/upload', uploadRoutes);
 
+// Dashboard / Portfolio routes
+const dashboardRoutes = require('./routes/dashboard.routes');
+app.use('/api/portfolio', dashboardRoutes);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

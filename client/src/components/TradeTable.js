@@ -71,7 +71,7 @@ export default function TradeTable({ initialData, onReset }) {
         setError('');
 
         try {
-            const response = await fetch('/api/execute-trades', {
+            const response = await fetch('/api/upload/execute-trades', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ trades }),
