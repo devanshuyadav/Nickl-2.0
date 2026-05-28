@@ -33,6 +33,10 @@ app.use('/api/portfolio', dashboardRoutes);
 const marketRoutes = require('./routes/market.routes');
 app.use('/api/market', marketRoutes);
 
+// Corporate Actions route
+const corporateRoutes = require('./routes/corporate.routes');
+app.use('/api/corporate', corporateRoutes);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
