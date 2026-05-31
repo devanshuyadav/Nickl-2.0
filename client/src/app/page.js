@@ -1,13 +1,26 @@
 'use client';
 import { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { redirect } from 'next/navigation';
 import FileUploader from '@/components/FileUploader';
 import TradeTable from '@/components/TradeTable';
 import Dashboard from '@/components/Dashboard';
 import Settings from '@/components/Settings';
 
 export default function Home() {
+  const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'upload', or 'settings'
   const [extractedData, setExtractedData] = useState(null);
+
+  // If loading auth state, show a spinner
+  if (status === 'loading') {
+    return <div className="min-h-screen flex items-center justify-center">Loading secure engine...</div>;
+  }
+
+  // If unauthenticated, boot them to the login page
+  if (status === 'unauthenticated') {
+    redirect('/login');
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

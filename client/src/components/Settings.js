@@ -39,7 +39,7 @@ export default function Settings({ onResetSuccess }) {
                     System Settings
                 </h2>
                 <div className="flex items-start p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
-                    <Info className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0" />
+                    <Info className="h-5 w-5 mr-3 mt-0.5 shrink-0" />
                     <p className="text-sm">
                         Symbol mappings (your Yahoo Finance ticker links) are stored in a separate database collection. Wiping your portfolio data will <strong>not</strong> delete your custom ticker mappings.
                     </p>
