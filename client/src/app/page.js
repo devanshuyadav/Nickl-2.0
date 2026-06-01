@@ -14,7 +14,7 @@ export default function Home() {
 
   // If loading auth state, show a spinner
   if (status === 'loading') {
-    return <div className="min-h-screen flex items-center justify-center">Loading secure engine...</div>;
+    return <div className="min-h-screen flex items-center justify-center">Collecting pennies...</div>;
   }
 
   // If unauthenticated, boot them to the login page
@@ -29,8 +29,8 @@ export default function Home() {
         {/* Header & Navigation */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-10">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Portfolio Engine</h1>
-            <p className="mt-2 text-sm text-gray-500">True fully-loaded FIFO execution tracking.</p>
+            <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Nickl</h1>
+            <p className="mt-2 text-sm text-gray-500">Insights into Groww contract notes.</p>
           </div>
 
           {/* Updated 3-Button Navigation */}
