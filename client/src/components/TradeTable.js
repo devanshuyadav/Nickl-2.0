@@ -113,22 +113,22 @@ export default function TradeTable({ initialData, onReset }) {
             {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">{error}</div>}
 
             {/* Manual Entry Form (For Missing Historical Trades) */}
-            <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                <h3 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
+            <div className="mb-8 p-4 bg-green-50 border border-green-100 rounded-lg">
+                <h3 className="text-sm font-semibold text-green-800 mb-3 flex items-center">
                     <Plus className="h-4 w-4 mr-1" /> Add Missing Historical Trade
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                    <input type="date" value={newTrade.tradeDate} onChange={e => setNewTrade({ ...newTrade, tradeDate: e.target.value })} className="p-2 border rounded" />
-                    <input type="text" placeholder="ISIN" value={newTrade.isin} onChange={e => setNewTrade({ ...newTrade, isin: e.target.value.toUpperCase() })} className="p-2 border rounded" />
-                    <input type="text" placeholder="Symbol" value={newTrade.symbol} onChange={e => setNewTrade({ ...newTrade, symbol: e.target.value.toUpperCase() })} className="p-2 border rounded" />
-                    <select value={newTrade.type} onChange={e => setNewTrade({ ...newTrade, type: e.target.value })} className="p-2 border rounded bg-white">
+                    <input type="date" value={newTrade.tradeDate} onChange={e => setNewTrade({ ...newTrade, tradeDate: e.target.value })} className="p-2 rounded bg-white text-black" />
+                    <input type="text" placeholder="ISIN" value={newTrade.isin} onChange={e => setNewTrade({ ...newTrade, isin: e.target.value.toUpperCase() })} className="p-2 rounded bg-white placeholder-gray-400 text-black" />
+                    <input type="text" placeholder="Symbol" value={newTrade.symbol} onChange={e => setNewTrade({ ...newTrade, symbol: e.target.value.toUpperCase() })} className="p-2 rounded bg-white placeholder-gray-400 text-black" />
+                    <select value={newTrade.type} onChange={e => setNewTrade({ ...newTrade, type: e.target.value })} className="p-2 rounded bg-white text-black">
                         <option value="BUY">BUY</option>
                         <option value="SELL">SELL</option>
                     </select>
-                    <input type="number" placeholder="Quantity" value={newTrade.quantity} onChange={e => setNewTrade({ ...newTrade, quantity: e.target.value })} className="p-2 border rounded" />
-                    <input type="number" placeholder="Price" value={newTrade.price} onChange={e => setNewTrade({ ...newTrade, price: e.target.value })} className="p-2 border rounded" />
+                    <input type="number" placeholder="Quantity" value={newTrade.quantity} onChange={e => setNewTrade({ ...newTrade, quantity: e.target.value })} className="p-2 rounded bg-white placeholder-gray-400 text-black" />
+                    <input type="number" placeholder="Price" value={newTrade.price} onChange={e => setNewTrade({ ...newTrade, price: e.target.value })} className="p-2 rounded bg-white placeholder-gray-400 text-black" />
 
-                    <button onClick={handleAddManualTrade} className="md:col-span-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded">
+                    <button onClick={handleAddManualTrade} className="md:col-span-4 cursor-pointer bg-green-700 text-white font-medium py-2 rounded">
                         Add to Queue
                     </button>
                 </div>
