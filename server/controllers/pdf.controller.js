@@ -39,15 +39,14 @@ const extractContractNote = async (req, res) => {
             for (let kw of keywordList) {
                 const index = sanitizedText.toLowerCase().lastIndexOf(kw.toLowerCase());
                 if (index !== -1) {
-                    console.log(" ");
-                    console.log("kw >>>", kw);
+                    // console.log("kw >>>", kw);
                     const chunk = sanitizedText.substring(index + kw.length, index + kw.length + 150);
                     // console.log("chunk >>>", chunk);
                     const nums = chunk.match(/[-]?\d+(?:\.\d+)?(?!\s*%)/g);
                     // console.log("nums >>>", nums);
                     if (nums && nums.length > 0) {
                         if (kw === 'DP Charges' || kw === 'CDSL DP Charges' || kw === 'Groww DP Charges') {
-                            console.log("Charge added - ", Math.abs(parseFloat(nums[2].replace(/,/g, ''))));
+                            // console.log("Charge added - ", Math.abs(parseFloat(nums[2].replace(/,/g, ''))));
                             return Math.abs(parseFloat(nums[2].replace(/,/g, '')));
                         } else {
                             return Math.abs(parseFloat(nums[0].replace(/,/g, '')));
@@ -58,10 +57,22 @@ const extractContractNote = async (req, res) => {
             return -2;
         };
 
-        const totalSTT = getTax(['Securities Transaction Tax']);
+        const helper = (k) => {
+            return getTax([k]) != -2 ? getTax([k]) : 0
+        }
+
+        const totalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']) != -2 ? getTax(['Taxable Value of Supply (Brokerage)']) : 0; console.log("Brokerage", totalBrokerage);
+        const ExchangeTransactionCharges = getTax(['Exchange Transaction Charges']) != -2 ? getTax(['Exchange Transaction Charges']) : 0; console.log("ETC", ExchangeTransactionCharges);
+        const CGST = helper('CGST'); console.log("FINAL: CGST", CGST);
+        const SGST = helper('SGST'); console.log("FINAL: SGST", SGST);
+        const IGST = helper('IGST'); console.log("FINAL: IGST", IGST);
+        const UTT = helper('UTT'); console.log("FINAL: UTT", UTT);
+        const TotalSTT = helper('Securities Transaction Tax'); console.log("FINAL: STT", TotalSTT);
+        const SEBITurnoverFees = helper('SEBI Turnover Fees'); console.log("FINAL: SEBITurnoverFees", SEBITurnoverFees);
+        const StampDuty = helper('Stamp Duty'); console.log("FINAL: StampDuty", StampDuty);
+        const IPFTCharges = helper('IPFT Charges'); console.log("FINAL: IPFTCharges", IPFTCharges);
 
         const totalOtherTaxes = Number((
-            getTax(['Exchange Transaction Charges']) +
             getTax(['SEBI Turnover Fees']) +
             getTax(['Stamp Duty']) +
             getTax(['CGST']) +
@@ -74,17 +85,11 @@ const extractContractNote = async (req, res) => {
         // DP Charges calculation
         let totalDpCharges = 0;
         if (getTax(['CDSL DP Charges']) != -2 && getTax(['Groww DP Charges']) != -2) { // means it is legacy format
-            // console.log("Modern format, only CDSL and Groww DP charges")
             totalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is modern format
-        } else {
-            // DP charges is in else clause because it will be detected in above cases as well
-            // console.log("Legacy format, only DP charges")
+        } else if (getTax(['DP Charges']) != -2) { // else if to prevent cases where DP charge is NA
+            // DP charges is in else if clause because it will be detected in above cases as well
             totalDpCharges = getTax(['DP Charges']);
         }
-        // console.log("Final totalDpCharges", totalDpCharges);
-
-        // Explicitly search for the Global Brokerage using specific summary terms
-        const totalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']);
 
         // 4. Header Fingerprinting & Trade Extraction
         let extractedTrades = [];
@@ -242,12 +247,14 @@ const extractContractNote = async (req, res) => {
 
         // Replace the raw extracted trades with our newly grouped, clean list
         extractedTrades = Object.values(consolidatedMap);
+        console.log(extractedTrades);
+
 
         // 5. Apportion Taxes & Brokerage
         const processedTrades = extractedTrades.map(trade => {
             const proportion = dailyTurnover > 0 ? (trade.grossValue / dailyTurnover) : 0;
 
-            const apportionedSTT = Number((totalSTT * proportion).toFixed(2));
+            const apportionedSTT = Number((TotalSTT * proportion).toFixed(2));
             const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
 
             // THE FIX: Distribute the global brokerage proportionally for Legacy trades.
@@ -282,13 +289,13 @@ const extractContractNote = async (req, res) => {
             };
         });
 
-        const netAmountReceivablePayable = Number((payInPayOut - totalBrokerage - totalSTT - totalOtherTaxes).toFixed(2));
+        const netAmountReceivablePayable = Number((payInPayOut - totalBrokerage - ExchangeTransactionCharges - CGST - SGST - IGST - UTT - TotalSTT - SEBITurnoverFees - StampDuty - IPFTCharges).toFixed(2));
         const finalNetCashFlow = Number((netAmountReceivablePayable - totalDpCharges).toFixed(2));
 
         // Return Data for the Frontend Confirmation Screen
         res.status(200).json({
             tradeDate,
-            summary: { dailyTurnover, payInPayOut, totalBrokerage, totalSTT, totalOtherTaxes, netAmountReceivablePayable, totalDpCharges, finalNetCashFlow },
+            summary: { dailyTurnover, payInPayOut, totalBrokerage, totalSTT: TotalSTT, totalOtherTaxes, netAmountReceivablePayable, totalDpCharges, finalNetCashFlow },
             transactions: processedTrades
         });
 
