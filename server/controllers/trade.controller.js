@@ -4,6 +4,7 @@ const Holding = require('../models/Holding');
 const executeTrades = async (req, res) => {
     try {
         const { trades } = req.body;
+        console.log(trades);
 
         if (!trades || !Array.isArray(trades) || trades.length === 0) {
             return res.status(400).json({ error: 'No trades provided for execution.' });

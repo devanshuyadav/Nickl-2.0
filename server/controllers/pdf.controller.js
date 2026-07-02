@@ -34,29 +34,62 @@ const extractContractNote = async (req, res) => {
         // 3. Bulletproof Tax & Fee Extraction
         const sanitizedText = fullText.replace(/\(\d+% on Brokerage.*?\)/gi, '');
 
-        const getTax = (keyword) => {
-            const index = sanitizedText.toLowerCase().indexOf(keyword.toLowerCase());
-            if (index === -1) return 0;
-            const chunk = sanitizedText.substring(index + keyword.length, index + keyword.length + 150);
-            const nums = chunk.match(/[-]?\d+(?:\.\d+)?(?!\s*%)/g);
-            return (nums && nums.length > 0) ? Math.abs(parseFloat(nums[0].replace(/,/g, ''))) : 0;
+        const getTax = (keywords) => {
+            const keywordList = Array.isArray(keywords) ? keywords : [keywords];
+            for (let kw of keywordList) {
+                const index = sanitizedText.toLowerCase().lastIndexOf(kw.toLowerCase());
+                if (index !== -1) {
+                    console.log(" ");
+                    console.log("kw >>>", kw);
+                    const chunk = sanitizedText.substring(index + kw.length, index + kw.length + 150);
+                    // console.log("chunk >>>", chunk);
+                    const nums = chunk.match(/[-]?\d+(?:\.\d+)?(?!\s*%)/g);
+                    // console.log("nums >>>", nums);
+                    if (nums && nums.length > 0) {
+                        if (kw === 'DP Charges' || kw === 'CDSL DP Charges' || kw === 'Groww DP Charges') {
+                            console.log("Charge added - ", Math.abs(parseFloat(nums[2].replace(/,/g, ''))));
+                            return Math.abs(parseFloat(nums[2].replace(/,/g, '')));
+                        } else {
+                            return Math.abs(parseFloat(nums[0].replace(/,/g, '')));
+                        }
+                    }
+                }
+            }
+            return -2;
         };
 
-        const totalSTT = getTax('Securities Transaction Tax');
-        const totalOtherTaxes = Number((getTax('Exchange Transaction Charges') + getTax('SEBI Turnover Fees') + getTax('Stamp Duty') + getTax('CGST') + getTax('SGST') + getTax('IGST') + getTax('IPFT Charges') + getTax('UTT')).toFixed(2));
+        const totalSTT = getTax(['Securities Transaction Tax']);
 
-        // Extract DP Charges
+        const totalOtherTaxes = Number((
+            getTax(['Exchange Transaction Charges']) +
+            getTax(['SEBI Turnover Fees']) +
+            getTax(['Stamp Duty']) +
+            getTax(['CGST']) +
+            getTax(['SGST']) +
+            getTax(['IGST']) +
+            getTax(['IPFT Charges']) +
+            getTax(['UTT'])
+        ).toFixed(2));
+
+        // DP Charges calculation
         let totalDpCharges = 0;
-        let dpIndex = sanitizedText.toLowerCase().indexOf('cdsl dp charges');
-        if (dpIndex === -1) dpIndex = sanitizedText.toLowerCase().indexOf('groww dp charges');
-        if (dpIndex !== -1) {
-            const match = sanitizedText.substring(dpIndex, dpIndex + 400).match(/Total\s+([\d,]+\.\d+)/i);
-            if (match) totalDpCharges = Math.abs(parseFloat(match[1].replace(/,/g, '')));
+        if (getTax(['CDSL DP Charges']) != -2 && getTax(['Groww DP Charges']) != -2) { // means it is legacy format
+            // console.log("Modern format, only CDSL and Groww DP charges")
+            totalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is modern format
+        } else {
+            // DP charges is in else clause because it will be detected in above cases as well
+            // console.log("Legacy format, only DP charges")
+            totalDpCharges = getTax(['DP Charges']);
         }
+        // console.log("Final totalDpCharges", totalDpCharges);
+
+        // Explicitly search for the Global Brokerage using specific summary terms
+        const totalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']);
 
         // 4. Header Fingerprinting & Trade Extraction
         let extractedTrades = [];
-        let dailyTurnover = 0, sellTurnover = 0, totalBrokerage = 0, payInPayOut = 0;
+        let dailyTurnover = 0, sellTurnover = 0, payInPayOut = 0;
+        let modernFormatBrokerage = 0;
 
         // --- FINGERPRINTING THE PDF ---
         // Scan the entire document for specific table headers that guarantee the format version.
@@ -81,7 +114,7 @@ const extractContractNote = async (req, res) => {
                     const tradeBrokerage = Math.abs(parseFloat(match[5])) * buyQty;
                     const grossValue = Math.abs(parseFloat(match[7])) - tradeBrokerage; // Derived from Total Value
                     dailyTurnover += grossValue;
-                    totalBrokerage += tradeBrokerage;
+                    modernFormatBrokerage += tradeBrokerage;
                     payInPayOut -= grossValue;
 
                     extractedTrades.push({
@@ -97,7 +130,7 @@ const extractContractNote = async (req, res) => {
                     const grossValue = Math.abs(parseFloat(match[12])) + tradeBrokerage;
                     dailyTurnover += grossValue;
                     sellTurnover += grossValue;
-                    totalBrokerage += tradeBrokerage;
+                    modernFormatBrokerage += tradeBrokerage;
                     payInPayOut += grossValue;
 
                     extractedTrades.push({
@@ -210,26 +243,42 @@ const extractContractNote = async (req, res) => {
         // Replace the raw extracted trades with our newly grouped, clean list
         extractedTrades = Object.values(consolidatedMap);
 
-        // 5. Apportion Taxes
+        // 5. Apportion Taxes & Brokerage
         const processedTrades = extractedTrades.map(trade => {
             const proportion = dailyTurnover > 0 ? (trade.grossValue / dailyTurnover) : 0;
+
             const apportionedSTT = Number((totalSTT * proportion).toFixed(2));
             const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
+
+            // THE FIX: Distribute the global brokerage proportionally for Legacy trades.
+            // If trade.brokerage is > 0 (Modern Format), we keep it. 
+            // If it's 0 (Legacy Format), we slice up the totalBrokerage based on trade weight.
+            const apportionedBrokerage = trade.brokerage > 0
+                ? trade.brokerage
+                : Number((totalBrokerage * proportion).toFixed(4));
+
             let apportionedDp = 0, netValue = 0;
 
             if (trade.type === 'BUY') {
-                // netValue = trade.grossValue + trade.brokerage + apportionedSTT + apportionedOtherTaxes;
-                netValue = trade.grossValue;
+                netValue = trade.grossValue + apportionedBrokerage + apportionedSTT + apportionedOtherTaxes;
             } else {
                 apportionedDp = Number((totalDpCharges * (sellTurnover > 0 ? trade.grossValue / sellTurnover : 0)).toFixed(2));
-                netValue = trade.grossValue - trade.brokerage - apportionedSTT - apportionedOtherTaxes - apportionedDp;
+                netValue = trade.grossValue - apportionedBrokerage - apportionedSTT - apportionedOtherTaxes - apportionedDp;
             }
 
             return {
-                isin: trade.isin, symbol: trade.symbol, tradeDate, type: trade.type,
-                quantity: trade.quantity, price: trade.price, brokerage: trade.brokerage,
-                stt: apportionedSTT, otherTaxes: apportionedOtherTaxes, dpCharges: apportionedDp,
-                grossValue: trade.grossValue, netValue: Number(netValue.toFixed(2))
+                isin: trade.isin,
+                symbol: trade.symbol,
+                tradeDate,
+                type: trade.type,
+                quantity: trade.quantity,
+                price: trade.price,
+                brokerage: apportionedBrokerage, // Inject the newly calculated brokerage here
+                stt: apportionedSTT,
+                otherTaxes: apportionedOtherTaxes,
+                dpCharges: apportionedDp,
+                grossValue: trade.grossValue,
+                netValue: Number(netValue.toFixed(2))
             };
         });
 
