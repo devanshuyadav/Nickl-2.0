@@ -121,6 +121,15 @@ export default function TradeTable({ initialData, onReset }) {
         );
     }
 
+    const formatDateToDDMMYY = (date) => {
+        const d = new Date(date);
+        if (isNaN(d)) return 'Invalid date';
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear()).slice(-2);
+        return `${day}-${month}-${year}`;
+    };
+
     return (
         <div className="space-y-6 mt-6 pb-12">
             {/* Header Bar */}
@@ -128,7 +137,7 @@ export default function TradeTable({ initialData, onReset }) {
                 <div>
                     <h2 className="text-xl font-bold text-gray-900">Review Extracted Trades</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                        Trade Date: <span className="font-mono font-medium text-gray-700">{new Date(initialData.tradeDate).toLocaleDateString()}</span>
+                        Trade Date: <span className="font-mono font-medium text-gray-700">{formatDateToDDMMYY(initialData.tradeDate)}</span>
                     </p>
                 </div>
                 <div className="flex space-x-3 w-full md:w-auto">
@@ -142,34 +151,115 @@ export default function TradeTable({ initialData, onReset }) {
                 </div>
             </div>
 
-            {/* Upgraded Summary Footer (6 Columns) */}
-            <div className="bg-gray-900 text-white p-6 rounded-xl border border-gray-800 shadow-sm grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
-                <div>
-                    <p className="text-gray-400 mb-1 text-[10px] uppercase tracking-wide">Gross Turnover</p>
-                    <p className="font-bold text-base">₹{summary.dailyTurnover.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div>
-                    <p className="text-gray-400 mb-1 text-[10px] uppercase tracking-wide">Brokerage</p>
-                    <p className="font-medium text-red-400">-₹{summary.totalBrokerage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div>
-                    <p className="text-gray-400 mb-1 text-[10px] uppercase tracking-wide">STT</p>
-                    <p className="font-medium text-red-400">-₹{summary.totalSTT.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div>
-                    <p className="text-gray-400 mb-1 text-[10px] uppercase tracking-wide">DP Charges</p>
-                    <p className="font-medium text-red-400">-₹{summary.totalDpCharges.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div>
-                    <p className="text-gray-400 mb-1 text-[10px] uppercase tracking-wide">Other Taxes</p>
-                    <p className="font-medium text-red-400">-₹{(summary.totalOtherTaxes || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="col-span-2 md:col-span-1 border-t border-gray-700 md:border-t-0 md:border-l md:pl-4 pt-4 md:pt-0">
-                    <p className="text-gray-400 mb-1 text-[10px] uppercase tracking-wide">Net Cash Flow</p>
-                    <p className={`font-bold text-lg ${summary.finalNetCashFlow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {summary.finalNetCashFlow > 0 ? '+' : ''}₹{summary.finalNetCashFlow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                </div>
+            {/* Upgraded Summary Table */}
+            <div className="bg-gray-900 text-white p-6 rounded-xl border border-gray-800 shadow-sm overflow-x-auto">
+                <table className="w-full text-sm">
+                    <tbody>
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">Pay In / Pay Out Obligation</td>
+                            <td className="py-2.5 text-right font-bold">
+                                ₹{summary.dailyTurnover.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">Taxable Value of Supply (Brokerage) </td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.totalBrokerage.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">Exchange Transaction Charges</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.exchangeTransactionCharges?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">CGST</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.cgst?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">SGST</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.sgst?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">IGST</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.igst?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">UTT</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.utt?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">Securities Transaction Tax</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.stt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">SEBI Turnover Fees</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.sebiFees?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">Stamp Duty</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.stampDuty?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">IPFT Charges</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.ipft?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-3 text-gray-300 font-semibold">Net amount Receivable / Payable by client</td>
+                            <td className="py-3 text-right font-bold text-lg">
+                                <span className={summary.finalNetCashFlow >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                    {summary.netAmountReceivablePayable > 0 ? '+ ' : ''}
+                                    ₹{summary.netAmountReceivablePayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+
+                        <tr className="border-b border-gray-700">
+                            <td className="py-2.5 text-gray-400 font-medium">DP Charges</td>
+                            <td className="py-2.5 text-right text-red-400 font-medium">
+                                -₹{summary.dp?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                        </tr>
+
+                        <tr className="border-t-2 border-gray-600">
+                            <td className="py-3 text-gray-300 font-semibold">Net Cash Flow</td>
+                            <td className="py-3 text-right font-bold text-lg">
+                                <span className={summary.finalNetCashFlow >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                    {summary.finalNetCashFlow > 0 ? '+ ' : ''}
+                                    ₹{summary.finalNetCashFlow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
             {/* The Expanded Trade Table */}
@@ -274,8 +364,6 @@ export default function TradeTable({ initialData, onReset }) {
                     </div>
                 </form>
             </div>
-
-            
         </div>
     );
 }

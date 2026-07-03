@@ -61,13 +61,13 @@ const extractContractNote = async (req, res) => {
             return getTax([k]) != -2 ? getTax([k]) : 0
         }
 
-        const totalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']) != -2 ? getTax(['Taxable Value of Supply (Brokerage)']) : 0; console.log("Brokerage", totalBrokerage);
+        const TotalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']) != -2 ? getTax(['Taxable Value of Supply (Brokerage)']) : 0; console.log("Brokerage", TotalBrokerage);
         const ExchangeTransactionCharges = getTax(['Exchange Transaction Charges']) != -2 ? getTax(['Exchange Transaction Charges']) : 0; console.log("ETC", ExchangeTransactionCharges);
         const CGST = helper('CGST'); console.log("FINAL: CGST", CGST);
         const SGST = helper('SGST'); console.log("FINAL: SGST", SGST);
         const IGST = helper('IGST'); console.log("FINAL: IGST", IGST);
         const UTT = helper('UTT'); console.log("FINAL: UTT", UTT);
-        const TotalSTT = helper('Securities Transaction Tax'); console.log("FINAL: STT", TotalSTT);
+        const STT = helper('Securities Transaction Tax'); console.log("FINAL: STT", STT);
         const SEBITurnoverFees = helper('SEBI Turnover Fees'); console.log("FINAL: SEBITurnoverFees", SEBITurnoverFees);
         const StampDuty = helper('Stamp Duty'); console.log("FINAL: StampDuty", StampDuty);
         const IPFTCharges = helper('IPFT Charges'); console.log("FINAL: IPFTCharges", IPFTCharges);
@@ -87,20 +87,20 @@ const extractContractNote = async (req, res) => {
         console.log("DP", getTax(['DP Charges']))
 
         // DP Charges calculation
-        let totalDpCharges = 0;
+        let TotalDpCharges = 0;
         if (getTax(['CDSL DP Charges']) != -2 && getTax(['Groww DP Charges']) != -2) { // means it is modern format
             console.log("modern dp charge");
-            totalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is legacy format
+            TotalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is legacy format
         } else if (getTax(['DP Charges']) != -2) { // else if to prevent cases where DP charge is NA
             // DP charges is in else if clause because it will be detected in above cases as well
             console.log("legacy dp charge");
-            totalDpCharges = getTax(['DP Charges']);
+            TotalDpCharges = getTax(['DP Charges']);
         }
-        console.log("totalDpCharges", totalDpCharges);
+        console.log("totalDpCharges", TotalDpCharges);
 
         // 4. Header Fingerprinting & Trade Extraction
         let extractedTrades = [];
-        let dailyTurnover = 0, sellTurnover = 0, payInPayOut = 0;
+        let DailyTurnover = 0, sellTurnover = 0, PayInPayOut = 0;
         let modernFormatBrokerage = 0;
 
         // --- FINGERPRINTING THE PDF ---
@@ -125,9 +125,9 @@ const extractContractNote = async (req, res) => {
                 if (buyQty > 0) {
                     const tradeBrokerage = Math.abs(parseFloat(match[5])) * buyQty;
                     const grossValue = Math.abs(parseFloat(match[7])) - tradeBrokerage; // Derived from Total Value
-                    dailyTurnover -= grossValue;
+                    DailyTurnover -= grossValue;
                     modernFormatBrokerage += tradeBrokerage;
-                    payInPayOut -= grossValue;
+                    PayInPayOut -= grossValue;
 
                     extractedTrades.push({
                         isin, symbol, type: 'BUY', quantity: buyQty,
@@ -140,10 +140,10 @@ const extractContractNote = async (req, res) => {
                 if (sellQty > 0) {
                     const tradeBrokerage = Math.abs(parseFloat(match[10])) * sellQty;
                     const grossValue = Math.abs(parseFloat(match[12])) + tradeBrokerage;
-                    dailyTurnover += grossValue;
+                    DailyTurnover += grossValue;
                     sellTurnover += grossValue;
                     modernFormatBrokerage += tradeBrokerage;
-                    payInPayOut += grossValue;
+                    PayInPayOut += grossValue;
 
                     extractedTrades.push({
                         isin, symbol, type: 'SELL', quantity: sellQty,
@@ -181,12 +181,12 @@ const extractContractNote = async (req, res) => {
                         trade.isin = foundIsin;
 
                         if (trade.type === 'SELL') {
-                            dailyTurnover += trade.grossValue;
+                            DailyTurnover += trade.grossValue;
                             sellTurnover += trade.grossValue;
-                            payInPayOut += trade.grossValue;
+                            PayInPayOut += trade.grossValue;
                         } else {
-                            dailyTurnover -= trade.grossValue;
-                            payInPayOut -= trade.grossValue;
+                            DailyTurnover -= trade.grossValue;
+                            PayInPayOut -= trade.grossValue;
                         }
 
                         extractedTrades.push(trade);
@@ -260,9 +260,9 @@ const extractContractNote = async (req, res) => {
 
         // 5. Apportion Taxes & Brokerage
         const processedTrades = extractedTrades.map(trade => {
-            const proportion = dailyTurnover > 0 ? (trade.grossValue / dailyTurnover) : 0;
+            const proportion = DailyTurnover > 0 ? (trade.grossValue / DailyTurnover) : 0;
 
-            const apportionedSTT = Number((TotalSTT * proportion).toFixed(2));
+            const apportionedSTT = Number((STT * proportion).toFixed(2));
             const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
 
             // THE FIX: Distribute the global brokerage proportionally for Legacy trades.
@@ -270,14 +270,14 @@ const extractContractNote = async (req, res) => {
             // If it's 0 (Legacy Format), we slice up the totalBrokerage based on trade weight.
             const apportionedBrokerage = trade.brokerage > 0
                 ? trade.brokerage
-                : Number((totalBrokerage * proportion).toFixed(4));
+                : Number((TotalBrokerage * proportion).toFixed(4));
 
             let apportionedDp = 0, netValue = 0;
 
             if (trade.type === 'BUY') {
                 netValue = trade.grossValue + apportionedBrokerage + apportionedSTT + apportionedOtherTaxes;
             } else {
-                apportionedDp = Number((totalDpCharges * (sellTurnover > 0 ? trade.grossValue / sellTurnover : 0)).toFixed(2));
+                apportionedDp = Number((TotalDpCharges * (sellTurnover > 0 ? trade.grossValue / sellTurnover : 0)).toFixed(2));
                 netValue = trade.grossValue - apportionedBrokerage - apportionedSTT - apportionedOtherTaxes - apportionedDp;
             }
 
@@ -297,15 +297,31 @@ const extractContractNote = async (req, res) => {
             };
         });
 
-        const netAmountReceivablePayable = Number((payInPayOut - totalBrokerage - ExchangeTransactionCharges - CGST - SGST - IGST - UTT - TotalSTT - SEBITurnoverFees - StampDuty - IPFTCharges).toFixed(2));
-        console.log("netAmountReceivablePayable", netAmountReceivablePayable);
-        const finalNetCashFlow = Number((netAmountReceivablePayable - totalDpCharges).toFixed(2));
-        console.log("finalNetCashFlow", finalNetCashFlow);
+        const NetAmountReceivablePayable = Number((PayInPayOut - TotalBrokerage - ExchangeTransactionCharges - CGST - SGST - IGST - UTT - STT - SEBITurnoverFees - StampDuty - IPFTCharges).toFixed(2));
+        console.log("netAmountReceivablePayable", NetAmountReceivablePayable);
+        const FinalNetCashFlow = Number((NetAmountReceivablePayable - TotalDpCharges).toFixed(2));
+        console.log("finalNetCashFlow", FinalNetCashFlow);
 
         // Return Data for the Frontend Confirmation Screen
         res.status(200).json({
             tradeDate,
-            summary: { dailyTurnover, payInPayOut, totalBrokerage, totalSTT: TotalSTT, totalOtherTaxes, netAmountReceivablePayable, totalDpCharges, finalNetCashFlow },
+            summary: {
+                dailyTurnover: DailyTurnover,
+                payInPayOut: PayInPayOut,
+                totalBrokerage: TotalBrokerage,
+                exchangeTransactionCharges: ExchangeTransactionCharges,
+                cgst: CGST,
+                sgst: SGST,
+                igst: IGST,
+                utt: UTT,
+                stt: STT,
+                sebiFees: SEBITurnoverFees,
+                stampDuty: StampDuty,
+                ipft: IPFTCharges,
+                netAmountReceivablePayable: NetAmountReceivablePayable,
+                dp: TotalDpCharges,
+                finalNetCashFlow: FinalNetCashFlow
+            },
             transactions: processedTrades
         });
 
