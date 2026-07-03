@@ -37,7 +37,7 @@ const extractContractNote = async (req, res) => {
         const getTax = (keywords) => {
             const keywordList = Array.isArray(keywords) ? keywords : [keywords];
             for (let kw of keywordList) {
-                const index = sanitizedText.toLowerCase().lastIndexOf(kw.toLowerCase());
+                const index = sanitizedText.toLowerCase().indexOf(kw.toLowerCase());
                 if (index !== -1) {
                     // console.log("kw >>>", kw);
                     const chunk = sanitizedText.substring(index + kw.length, index + kw.length + 150);
@@ -82,14 +82,21 @@ const extractContractNote = async (req, res) => {
             getTax(['UTT'])
         ).toFixed(2));
 
+        console.log("CDSL DP", getTax(['CDSL DP Charges']))
+        console.log("Groww DP", getTax(['Groww DP Charges']))
+        console.log("DP", getTax(['DP Charges']))
+
         // DP Charges calculation
         let totalDpCharges = 0;
-        if (getTax(['CDSL DP Charges']) != -2 && getTax(['Groww DP Charges']) != -2) { // means it is legacy format
-            totalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is modern format
+        if (getTax(['CDSL DP Charges']) != -2 && getTax(['Groww DP Charges']) != -2) { // means it is modern format
+            console.log("modern dp charge");
+            totalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is legacy format
         } else if (getTax(['DP Charges']) != -2) { // else if to prevent cases where DP charge is NA
             // DP charges is in else if clause because it will be detected in above cases as well
+            console.log("legacy dp charge");
             totalDpCharges = getTax(['DP Charges']);
         }
+        console.log("totalDpCharges", totalDpCharges);
 
         // 4. Header Fingerprinting & Trade Extraction
         let extractedTrades = [];
@@ -118,7 +125,7 @@ const extractContractNote = async (req, res) => {
                 if (buyQty > 0) {
                     const tradeBrokerage = Math.abs(parseFloat(match[5])) * buyQty;
                     const grossValue = Math.abs(parseFloat(match[7])) - tradeBrokerage; // Derived from Total Value
-                    dailyTurnover += grossValue;
+                    dailyTurnover -= grossValue;
                     modernFormatBrokerage += tradeBrokerage;
                     payInPayOut -= grossValue;
 
@@ -173,11 +180,12 @@ const extractContractNote = async (req, res) => {
                     unassignedTrades.forEach(trade => {
                         trade.isin = foundIsin;
 
-                        dailyTurnover += trade.grossValue;
                         if (trade.type === 'SELL') {
+                            dailyTurnover += trade.grossValue;
                             sellTurnover += trade.grossValue;
                             payInPayOut += trade.grossValue;
                         } else {
+                            dailyTurnover -= trade.grossValue;
                             payInPayOut -= trade.grossValue;
                         }
 
@@ -290,7 +298,9 @@ const extractContractNote = async (req, res) => {
         });
 
         const netAmountReceivablePayable = Number((payInPayOut - totalBrokerage - ExchangeTransactionCharges - CGST - SGST - IGST - UTT - TotalSTT - SEBITurnoverFees - StampDuty - IPFTCharges).toFixed(2));
+        console.log("netAmountReceivablePayable", netAmountReceivablePayable);
         const finalNetCashFlow = Number((netAmountReceivablePayable - totalDpCharges).toFixed(2));
+        console.log("finalNetCashFlow", finalNetCashFlow);
 
         // Return Data for the Frontend Confirmation Screen
         res.status(200).json({
