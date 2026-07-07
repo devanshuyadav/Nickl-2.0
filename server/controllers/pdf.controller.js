@@ -62,8 +62,6 @@ const extractContractNote = async (req, res) => {
         const StampDuty = helper('Stamp Duty'); console.log("FINAL: StampDuty", StampDuty);
         const IPFTCharges = helper('IPFT Charges'); console.log("FINAL: IPFTCharges", IPFTCharges);
 
-        const totalOtherTaxes = Number((getTax(['SEBI Turnover Fees']) + getTax(['Stamp Duty']) + getTax(['CGST']) + getTax(['SGST']) + getTax(['IGST']) + getTax(['IPFT Charges']) + getTax(['UTT'])).toFixed(2));
-
         console.log("CDSL DP", getTax(['CDSL DP Charges']))
         console.log("Groww DP", getTax(['Groww DP Charges']))
         console.log("DP", getTax(['DP Charges']))
