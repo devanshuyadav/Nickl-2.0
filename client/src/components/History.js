@@ -14,7 +14,6 @@ export default function History() {
     const fetchNotes = async () => {
         try {
             const res = await fetch('/api/contract-notes');
-            console.log('on frontend:', res)
             if (!res.ok) throw new Error('Failed to fetch contract notes');
             const data = await res.json();
             setNotes(data);

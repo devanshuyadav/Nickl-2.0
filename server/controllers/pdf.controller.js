@@ -51,29 +51,23 @@ const extractContractNote = async (req, res) => {
             return getTax([k]) != -2 ? getTax([k]) : 0
         }
 
-        const TotalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']) != -2 ? getTax(['Taxable Value of Supply (Brokerage)']) : 0; console.log("Brokerage", TotalBrokerage);
-        const ExchangeTransactionCharges = getTax(['Exchange Transaction Charges']) != -2 ? getTax(['Exchange Transaction Charges']) : 0; console.log("ETC", ExchangeTransactionCharges);
-        const CGST = helper('CGST'); console.log("FINAL: CGST", CGST);
-        const SGST = helper('SGST'); console.log("FINAL: SGST", SGST);
-        const IGST = helper('IGST'); console.log("FINAL: IGST", IGST);
-        const UTT = helper('UTT'); console.log("FINAL: UTT", UTT);
-        const STT = helper('Securities Transaction Tax'); console.log("FINAL: STT", STT);
-        const SEBITurnoverFees = helper('SEBI Turnover Fees'); console.log("FINAL: SEBITurnoverFees", SEBITurnoverFees);
-        const StampDuty = helper('Stamp Duty'); console.log("FINAL: StampDuty", StampDuty);
-        const IPFTCharges = helper('IPFT Charges'); console.log("FINAL: IPFTCharges", IPFTCharges);
-
-        console.log("CDSL DP", getTax(['CDSL DP Charges']))
-        console.log("Groww DP", getTax(['Groww DP Charges']))
-        console.log("DP", getTax(['DP Charges']))
+        const TotalBrokerage = getTax(['Taxable Value of Supply (Brokerage)']) != -2 ? getTax(['Taxable Value of Supply (Brokerage)']) : 0;
+        const ExchangeTransactionCharges = getTax(['Exchange Transaction Charges']) != -2 ? getTax(['Exchange Transaction Charges']) : 0;
+        const CGST = helper('CGST');
+        const SGST = helper('SGST');
+        const IGST = helper('IGST');
+        const UTT = helper('UTT');
+        const STT = helper('Securities Transaction Tax');
+        const SEBITurnoverFees = helper('SEBI Turnover Fees');
+        const StampDuty = helper('Stamp Duty');
+        const IPFTCharges = helper('IPFT Charges');
 
         // DP Charges calculation
         let TotalDpCharges = 0;
         if (getTax(['CDSL DP Charges']) != -2 && getTax(['Groww DP Charges']) != -2) { // means it is modern format
-            console.log("modern dp charge");
             TotalDpCharges = getTax(['CDSL DP Charges']) + getTax(['Groww DP Charges']); // means it is legacy format
         } else if (getTax(['DP Charges']) != -2) { // else if to prevent cases where DP charge is NA
             // DP charges is in else if clause because it will be detected in above cases as well
-            console.log("legacy dp charge");
             TotalDpCharges = getTax(['DP Charges']);
         }
         console.log("totalDpCharges", TotalDpCharges);
@@ -221,7 +215,6 @@ const extractContractNote = async (req, res) => {
 
         // Replace the raw extracted trades with our newly grouped, clean list
         extractedTrades = Object.values(consolidatedMap);
-        console.log(extractedTrades);
 
         // 5. REMOVE APPORTIONMENT – per-trade fees are now zero. All fees are handled globally via the summary.
         const processedTrades = extractedTrades.map(trade => ({
@@ -243,30 +236,6 @@ const extractContractNote = async (req, res) => {
         console.log("netAmountReceivablePayable", NetAmountReceivablePayable);
         const FinalNetCashFlow = Number((NetAmountReceivablePayable - TotalDpCharges).toFixed(2));
         console.log("finalNetCashFlow", FinalNetCashFlow);
-
-        // Return Data for the Frontend Confirmation Screen
-        const response = {
-            tradeDate,
-            summary: {
-                dailyTurnover: DailyTurnover,
-                payInPayOut: PayInPayOut,
-                totalBrokerage: TotalBrokerage,
-                exchangeTransactionCharges: ExchangeTransactionCharges,
-                cgst: CGST,
-                sgst: SGST,
-                igst: IGST,
-                utt: UTT,
-                stt: STT,
-                sebiFees: SEBITurnoverFees,
-                stampDuty: StampDuty,
-                ipft: IPFTCharges,
-                netAmountReceivablePayable: NetAmountReceivablePayable,
-                dp: TotalDpCharges,
-                finalNetCashFlow: FinalNetCashFlow
-            },
-            transactions: processedTrades
-        }
-        console.log("response", response);
 
         res.status(200).json({
             tradeDate,

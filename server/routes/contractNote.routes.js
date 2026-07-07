@@ -5,9 +5,7 @@ const ContractNote = require('../models/ContractNote');
 // GET /api/contract-notes – Fetch all contract notes (latest first)
 router.get('/', async (req, res) => {
     try {
-        console.log("in backend");
         const notes = await ContractNote.find().sort({ tradeDate: -1 });
-        console.log(notes);
         res.json(notes);
     } catch (error) {
         console.error('Error fetching contract notes:', error);

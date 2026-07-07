@@ -1,14 +1,21 @@
 const Transaction = require('../models/Transaction');
 const Holding = require('../models/Holding');
-const ContractNote = require('../models/ContractNote')
+
 
 const executeTrades = async (req, res) => {
     try {
         const { transactions } = req.body;
-        console.log(transactions);
 
         if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
             return res.status(400).json({ error: 'No trades provided for execution.' });
+        }
+
+        const ContractNote = require('../models/ContractNote')
+        const existing = await ContractNote.findOne({ tradeDate: req.body.tradeDate });
+        if (existing) {
+            return res.status(409).json({
+                error: `Contract note already exists in the database. Duplicate uploads are not allowed.`
+            });
         }
 
         // We sort the trades by Date automatically, just in case the frontend sends a mixed batch
@@ -98,7 +105,6 @@ const executeTrades = async (req, res) => {
         }
 
         // Save the daily summary to ContractNote
-        const ContractNote = require('../models/ContractNote');
         if (req.body.summary) {
             const summary = req.body.summary;
             const totalOtherTaxes = (summary.cgst || 0) + (summary.sgst || 0) + (summary.igst || 0) +

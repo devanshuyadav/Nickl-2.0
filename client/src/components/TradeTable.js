@@ -73,7 +73,16 @@ export default function TradeTable({ initialData, onReset }) {
                 body: JSON.stringify(payload)
             });
 
-            if (!res.ok) throw new Error('Failed to save to database');
+            const responseData = await res.json();
+
+            if (!res.ok) {
+                if (res.status === 409) {
+                    alert(responseData.error);
+                    setIsSaving(false);
+                    return;
+                }
+                throw new Error(data.error || 'Failed to save to database');
+            }
 
             setSaveStatus('success');
             setTimeout(() => { window.location.reload(); }, 1500);
