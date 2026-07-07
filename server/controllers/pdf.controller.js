@@ -4,18 +4,12 @@ const extractContractNote = async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No PDF file uploaded.' });
 
-        // Pull the password from the frontend request!
         const panPassword = req.body.password || process.env.PDF_PASSWORD;
-
         if (!panPassword) return res.status(500).json({ error: 'PDF_PASSWORD is not set.' });
 
         // 1. Crack the PDF
         const dataBuffer = new Uint8Array(req.file.buffer);
-        const loadingTask = pdfjsLib.getDocument({
-            data: dataBuffer,
-            password: panPassword,
-            useSystemFonts: true
-        });
+        const loadingTask = pdfjsLib.getDocument({ data: dataBuffer, password: panPassword, useSystemFonts: true });
 
         const pdfDocument = await loadingTask.promise;
         let fullText = "";
@@ -39,14 +33,10 @@ const extractContractNote = async (req, res) => {
             for (let kw of keywordList) {
                 const index = sanitizedText.toLowerCase().indexOf(kw.toLowerCase());
                 if (index !== -1) {
-                    // console.log("kw >>>", kw);
                     const chunk = sanitizedText.substring(index + kw.length, index + kw.length + 150);
-                    // console.log("chunk >>>", chunk);
                     const nums = chunk.match(/[-]?\d+(?:\.\d+)?(?!\s*%)/g);
-                    // console.log("nums >>>", nums);
                     if (nums && nums.length > 0) {
                         if (kw === 'DP Charges' || kw === 'CDSL DP Charges' || kw === 'Groww DP Charges') {
-                            // console.log("Charge added - ", Math.abs(parseFloat(nums[2].replace(/,/g, ''))));
                             return Math.abs(parseFloat(nums[2].replace(/,/g, '')));
                         } else {
                             return Math.abs(parseFloat(nums[0].replace(/,/g, '')));
@@ -72,15 +62,7 @@ const extractContractNote = async (req, res) => {
         const StampDuty = helper('Stamp Duty'); console.log("FINAL: StampDuty", StampDuty);
         const IPFTCharges = helper('IPFT Charges'); console.log("FINAL: IPFTCharges", IPFTCharges);
 
-        const totalOtherTaxes = Number((
-            getTax(['SEBI Turnover Fees']) +
-            getTax(['Stamp Duty']) +
-            getTax(['CGST']) +
-            getTax(['SGST']) +
-            getTax(['IGST']) +
-            getTax(['IPFT Charges']) +
-            getTax(['UTT'])
-        ).toFixed(2));
+        const totalOtherTaxes = Number((getTax(['SEBI Turnover Fees']) + getTax(['Stamp Duty']) + getTax(['CGST']) + getTax(['SGST']) + getTax(['IGST']) + getTax(['IPFT Charges']) + getTax(['UTT'])).toFixed(2));
 
         console.log("CDSL DP", getTax(['CDSL DP Charges']))
         console.log("Groww DP", getTax(['Groww DP Charges']))
@@ -100,8 +82,7 @@ const extractContractNote = async (req, res) => {
 
         // 4. Header Fingerprinting & Trade Extraction
         let extractedTrades = [];
-        let DailyTurnover = 0, sellTurnover = 0, PayInPayOut = 0;
-        let modernFormatBrokerage = 0;
+        let DailyTurnover = 0, PayInPayOut = 0;
 
         // --- FINGERPRINTING THE PDF ---
         // Scan the entire document for specific table headers that guarantee the format version.
@@ -109,7 +90,7 @@ const extractContractNote = async (req, res) => {
         const isLegacyFormat = /Gross Rate\/ Trade Price|Closing Rate per Unit/i.test(fullText);
 
         if (isModernFormat) {
-            console.log("🟢 Modern Format Detected: Using 14-Column Layout Parser...");
+            console.log("Modern Format Detected: Using 14-Column Layout Parser...");
 
             // Matches: ISIN | Symbol | 5 Buy Cols | 5 Sell Cols | 2 Net Cols
             // We use (.+?) for the symbol so it doesn't break on weird characters like '*' or '@'
@@ -126,7 +107,6 @@ const extractContractNote = async (req, res) => {
                     const tradeBrokerage = Math.abs(parseFloat(match[5])) * buyQty;
                     const grossValue = Math.abs(parseFloat(match[7])) - tradeBrokerage; // Derived from Total Value
                     DailyTurnover -= grossValue;
-                    modernFormatBrokerage += tradeBrokerage;
                     PayInPayOut -= grossValue;
 
                     extractedTrades.push({
@@ -141,8 +121,6 @@ const extractContractNote = async (req, res) => {
                     const tradeBrokerage = Math.abs(parseFloat(match[10])) * sellQty;
                     const grossValue = Math.abs(parseFloat(match[12])) + tradeBrokerage;
                     DailyTurnover += grossValue;
-                    sellTurnover += grossValue;
-                    modernFormatBrokerage += tradeBrokerage;
                     PayInPayOut += grossValue;
 
                     extractedTrades.push({
@@ -154,18 +132,10 @@ const extractContractNote = async (req, res) => {
                 }
             }
         } else if (isLegacyFormat) {
-            console.log("🟡 Legacy Format Detected: Using Continuous Stream Parser...");
+            console.log("Legacy Format Detected: Using Continuous Stream Parser...");
 
             let unassignedTrades = [];
 
-            // THE FIX: A single, global scanner that walks through the entire text stream.
-            // It looks for EITHER a Trade row (Groups 1-5) OR a Total/ISIN row (Group 6).
-            // Group 1: Raw Symbol (might contain trade numbers)
-            // Group 2: Exchange
-            // Group 3: B/S
-            // Group 4: Quantity
-            // Group 5: Price
-            // Group 6: ISIN (Only exists if it matched a Total row)
             const legacyScannerRegex = /(?:\d{2}:\d{2}:\d{2}\s+([A-Za-z0-9\s\.\-\&\(\)\',]+?)\s+(NSE|BSE)\s+(B|S)\s+(-?[\d.,]+)\s+([\d.,]+))|(?:Total\s+(IN[A-Z0-9]{10}))/gi;
 
             let match;
@@ -182,7 +152,6 @@ const extractContractNote = async (req, res) => {
 
                         if (trade.type === 'SELL') {
                             DailyTurnover += trade.grossValue;
-                            sellTurnover += trade.grossValue;
                             PayInPayOut += trade.grossValue;
                         } else {
                             DailyTurnover -= trade.grossValue;
@@ -222,12 +191,11 @@ const extractContractNote = async (req, res) => {
                 }
             }
         } else {
-            // THE FAILSAFE
-            throw new Error("🚨 Unrecognized PDF Format. Neither Modern nor Legacy column headers were found.");
+            throw new Error("Unrecognized PDF Format. Neither Modern nor Legacy column headers were found.");
         }
 
         if (extractedTrades.length === 0) {
-            throw new Error("🚨 Format was recognized, but no valid trades could be extracted. Check the PDF text structure.");
+            throw new Error("Format was recognized, but no valid trades could be extracted. Check the PDF text structure.");
         }
 
         // ==========================================
@@ -257,45 +225,21 @@ const extractContractNote = async (req, res) => {
         extractedTrades = Object.values(consolidatedMap);
         console.log(extractedTrades);
 
-
-        // 5. Apportion Taxes & Brokerage
-        const processedTrades = extractedTrades.map(trade => {
-            const proportion = DailyTurnover > 0 ? (trade.grossValue / DailyTurnover) : 0;
-
-            const apportionedSTT = Number((STT * proportion).toFixed(2));
-            const apportionedOtherTaxes = Number((totalOtherTaxes * proportion).toFixed(2));
-
-            // THE FIX: Distribute the global brokerage proportionally for Legacy trades.
-            // If trade.brokerage is > 0 (Modern Format), we keep it. 
-            // If it's 0 (Legacy Format), we slice up the totalBrokerage based on trade weight.
-            const apportionedBrokerage = trade.brokerage > 0
-                ? trade.brokerage
-                : Number((TotalBrokerage * proportion).toFixed(4));
-
-            let apportionedDp = 0, netValue = 0;
-
-            if (trade.type === 'BUY') {
-                netValue = trade.grossValue + apportionedBrokerage + apportionedSTT + apportionedOtherTaxes;
-            } else {
-                apportionedDp = Number((TotalDpCharges * (sellTurnover > 0 ? trade.grossValue / sellTurnover : 0)).toFixed(2));
-                netValue = trade.grossValue - apportionedBrokerage - apportionedSTT - apportionedOtherTaxes - apportionedDp;
-            }
-
-            return {
-                isin: trade.isin,
-                symbol: trade.symbol,
-                tradeDate,
-                type: trade.type,
-                quantity: trade.quantity,
-                price: trade.price,
-                brokerage: apportionedBrokerage, // Inject the newly calculated brokerage here
-                stt: apportionedSTT,
-                otherTaxes: apportionedOtherTaxes,
-                dpCharges: apportionedDp,
-                grossValue: trade.grossValue,
-                netValue: Number(netValue.toFixed(2))
-            };
-        });
+        // 5. REMOVE APPORTIONMENT – per-trade fees are now zero. All fees are handled globally via the summary.
+        const processedTrades = extractedTrades.map(trade => ({
+            isin: trade.isin,
+            symbol: trade.symbol,
+            tradeDate,                      // from outer scope
+            type: trade.type,
+            quantity: trade.quantity,
+            price: trade.price,             // weighted average if consolidation ran
+            brokerage: 0,
+            stt: 0,
+            otherTaxes: 0,
+            dpCharges: 0,
+            grossValue: trade.grossValue,
+            netValue: Number(trade.grossValue.toFixed(2))
+        }));
 
         const NetAmountReceivablePayable = Number((PayInPayOut - TotalBrokerage - ExchangeTransactionCharges - CGST - SGST - IGST - UTT - STT - SEBITurnoverFees - StampDuty - IPFTCharges).toFixed(2));
         console.log("netAmountReceivablePayable", NetAmountReceivablePayable);
@@ -303,6 +247,29 @@ const extractContractNote = async (req, res) => {
         console.log("finalNetCashFlow", FinalNetCashFlow);
 
         // Return Data for the Frontend Confirmation Screen
+        const response = {
+            tradeDate,
+            summary: {
+                dailyTurnover: DailyTurnover,
+                payInPayOut: PayInPayOut,
+                totalBrokerage: TotalBrokerage,
+                exchangeTransactionCharges: ExchangeTransactionCharges,
+                cgst: CGST,
+                sgst: SGST,
+                igst: IGST,
+                utt: UTT,
+                stt: STT,
+                sebiFees: SEBITurnoverFees,
+                stampDuty: StampDuty,
+                ipft: IPFTCharges,
+                netAmountReceivablePayable: NetAmountReceivablePayable,
+                dp: TotalDpCharges,
+                finalNetCashFlow: FinalNetCashFlow
+            },
+            transactions: processedTrades
+        }
+        console.log("response", response);
+
         res.status(200).json({
             tradeDate,
             summary: {
