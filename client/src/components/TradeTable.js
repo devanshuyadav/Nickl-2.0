@@ -18,12 +18,6 @@ export default function TradeTable({ initialData, onReset }) {
     const [manualQty, setManualQty] = useState('');
     const [manualPrice, setManualPrice] = useState('');
 
-    // New Tax Form State
-    const [manualBrokerage, setManualBrokerage] = useState('');
-    const [manualSTT, setManualSTT] = useState('');
-    const [manualDP, setManualDP] = useState('');
-    const [manualOther, setManualOther] = useState('');
-
     const handleAddManualTrade = (e) => {
         e.preventDefault();
         if (!manualSymbol || !manualQty || !manualPrice) return;
@@ -31,22 +25,7 @@ export default function TradeTable({ initialData, onReset }) {
         const qty = Math.abs(Number(manualQty));
         const price = Math.abs(Number(manualPrice));
         const grossValue = qty * price;
-
-        // Default to 0 if left blank
-        const brokerage = Math.abs(Number(manualBrokerage)) || 0;
-        const stt = Math.abs(Number(manualSTT)) || 0;
-        const dp = Math.abs(Number(manualDP)) || 0;
-        const other = Math.abs(Number(manualOther)) || 0;
-
-        // Calculate True Net Value mathematically based on B/S type
-        let netValue = 0;
-        if (manualType === 'BUY') {
-            // Buying costs you the gross + all fees
-            netValue = grossValue + brokerage + stt + dp + other;
-        } else {
-            // Selling gets you the gross - all fees
-            netValue = grossValue - brokerage - stt - dp - other;
-        }
+        const netValue = grossValue; // no fees
 
         const newTrade = {
             isin: `${manualSymbol.toUpperCase()}_MANUAL`,
@@ -56,29 +35,25 @@ export default function TradeTable({ initialData, onReset }) {
             quantity: qty,
             price: price,
             grossValue: grossValue,
-            brokerage: brokerage,
-            stt: stt,
-            dpCharges: dp,
-            otherTaxes: other,
-            netValue: netValue
+            netValue: netValue,
+            // Fee fields are set to 0 (they are not used anymore)
+            brokerage: 0,
+            stt: 0,
+            dpCharges: 0,
+            otherTaxes: 0,
         };
 
         setTrades([...trades, newTrade]);
 
-        // Update global summary dynamically with the new charges!
+        // Update global summary dynamically (only turnover and net cash flow)
         setSummary(prev => ({
             ...prev,
             dailyTurnover: prev.dailyTurnover + grossValue,
-            totalBrokerage: prev.totalBrokerage + brokerage,
-            totalSTT: prev.totalSTT + stt,
-            totalDpCharges: prev.totalDpCharges + dp,
-            totalOtherTaxes: (prev.totalOtherTaxes || 0) + other,
             finalNetCashFlow: prev.finalNetCashFlow + (manualType === 'SELL' ? netValue : -netValue)
         }));
 
-        // Reset Form completely
+        // Reset form completely
         setManualSymbol(''); setManualQty(''); setManualPrice('');
-        setManualBrokerage(''); setManualSTT(''); setManualDP(''); setManualOther('');
     };
 
     const handleConfirm = async () => {
@@ -161,94 +136,81 @@ export default function TradeTable({ initialData, onReset }) {
                                 ₹{summary.dailyTurnover.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">Taxable Value of Supply (Brokerage) </td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.totalBrokerage.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">Exchange Transaction Charges</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.exchangeTransactionCharges?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">CGST</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.cgst?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">SGST</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.sgst?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">IGST</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.igst?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">UTT</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.utt?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">Securities Transaction Tax</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.stt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">SEBI Turnover Fees</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.sebiFees?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">Stamp Duty</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.stampDuty?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">IPFT Charges</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.ipft?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-3 text-gray-300 font-semibold">Net amount Receivable / Payable by client</td>
                             <td className="py-3 text-right font-bold text-lg">
-                                <span className={summary.finalNetCashFlow >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                <span className={summary.netAmountReceivablePayable >= 0 ? 'text-green-400' : 'text-red-400'}>
                                     {summary.netAmountReceivablePayable > 0 ? '+ ' : ''}
                                     ₹{summary.netAmountReceivablePayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </span>
                             </td>
                         </tr>
-
                         <tr className="border-b border-gray-700">
                             <td className="py-2.5 text-gray-400 font-medium">DP Charges</td>
                             <td className="py-2.5 text-right text-red-400 font-medium">
                                 -₹{summary.dp?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                             </td>
                         </tr>
-
                         <tr className="border-t-2 border-gray-600">
                             <td className="py-3 text-gray-300 font-semibold">Net Cash Flow</td>
                             <td className="py-3 text-right font-bold text-lg">
@@ -265,7 +227,7 @@ export default function TradeTable({ initialData, onReset }) {
             {/* The Expanded Trade Table */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-600 min-w-[1000px]">
+                    <table className="w-full text-sm text-left text-gray-600 min-w-[700px]">
                         <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
                             <tr>
                                 <th className="px-4 py-4">Symbol</th>
@@ -273,10 +235,6 @@ export default function TradeTable({ initialData, onReset }) {
                                 <th className="px-4 py-4 text-right">Qty</th>
                                 <th className="px-4 py-4 text-right">Price</th>
                                 <th className="px-4 py-4 text-right border-l border-gray-200">Gross Value</th>
-                                <th className="px-4 py-4 text-right">Brokerage</th>
-                                <th className="px-4 py-4 text-right">STT</th>
-                                <th className="px-4 py-4 text-right">DP Chg</th>
-                                <th className="px-4 py-4 text-right">Other</th>
                                 <th className="px-4 py-4 text-right bg-gray-100 border-l border-gray-200 text-gray-900">Net Value</th>
                             </tr>
                         </thead>
@@ -295,10 +253,6 @@ export default function TradeTable({ initialData, onReset }) {
                                     <td className="px-4 py-3 text-right font-mono">{trade.quantity}</td>
                                     <td className="px-4 py-3 text-right font-mono">₹{trade.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                     <td className="px-4 py-3 text-right text-gray-500 border-l border-gray-100">₹{trade.grossValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                    <td className="px-4 py-3 text-right text-red-500 text-xs">{trade.brokerage > 0 ? `-₹${trade.brokerage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</td>
-                                    <td className="px-4 py-3 text-right text-red-500 text-xs">{trade.stt > 0 ? `-₹${trade.stt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</td>
-                                    <td className="px-4 py-3 text-right text-red-500 text-xs">{trade.dpCharges > 0 ? `-₹${trade.dpCharges.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</td>
-                                    <td className="px-4 py-3 text-right text-red-500 text-xs">{trade.otherTaxes > 0 ? `-₹${trade.otherTaxes.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</td>
                                     <td className="px-4 py-3 text-right font-bold bg-gray-50 border-l border-gray-100 text-gray-900">₹{trade.netValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                             ))}
@@ -314,8 +268,6 @@ export default function TradeTable({ initialData, onReset }) {
                     Add Missing Historical Trade
                 </h3>
                 <form onSubmit={handleAddManualTrade} className="space-y-4">
-
-                    {/* Row 1: The Core Math */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-800 mb-1">Symbol</label>
@@ -337,30 +289,10 @@ export default function TradeTable({ initialData, onReset }) {
                             <input type="number" placeholder="0.00" step="0.01" min="0.01" value={manualPrice} onChange={e => setManualPrice(e.target.value)} className="w-full border border-blue-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500" />
                         </div>
                     </div>
-
-                    {/* Row 2: The Taxes & Submit */}
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-2 border-t border-blue-100">
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-1">Brokerage (₹)</label>
-                            <input type="number" placeholder="0.00" step="0.01" min="0" value={manualBrokerage} onChange={e => setManualBrokerage(e.target.value)} className="w-full border border-blue-200 rounded p-1.5 text-sm focus:ring-blue-500 focus:border-blue-500" />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-1">STT (₹)</label>
-                            <input type="number" placeholder="0.00" step="0.01" min="0" value={manualSTT} onChange={e => setManualSTT(e.target.value)} className="w-full border border-blue-200 rounded p-1.5 text-sm focus:ring-blue-500 focus:border-blue-500" />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-1">DP Charges (₹)</label>
-                            <input type="number" placeholder="0.00" step="0.01" min="0" value={manualDP} onChange={e => setManualDP(e.target.value)} className="w-full border border-blue-200 rounded p-1.5 text-sm focus:ring-blue-500 focus:border-blue-500" />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-1">Other Taxes (₹)</label>
-                            <input type="number" placeholder="0.00" step="0.01" min="0" value={manualOther} onChange={e => setManualOther(e.target.value)} className="w-full border border-blue-200 rounded p-1.5 text-sm focus:ring-blue-500 focus:border-blue-500" />
-                        </div>
-                        <div className="flex items-end">
-                            <button type="submit" className="w-full bg-blue-600 text-white rounded p-1.5 text-sm font-bold tracking-wide hover:bg-blue-700 transition-colors h-[34px]">
-                                Add to Ledger
-                            </button>
-                        </div>
+                    <div className="flex justify-end">
+                        <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold tracking-wide hover:bg-blue-700 transition-colors">
+                            Add to Ledger
+                        </button>
                     </div>
                 </form>
             </div>
