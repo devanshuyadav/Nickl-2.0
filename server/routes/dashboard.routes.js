@@ -151,9 +151,6 @@ router.delete('/reset', async (req, res) => {
 router.get('/transactions/:isin', async (req, res) => {
     try {
         const { isin } = req.params;
-        console.log("hey");
-
-        console.log(isin);
         const transactions = await Transaction.find({ isin }).sort({ tradeDate: 1 });
         res.json(transactions);
     } catch (error) {

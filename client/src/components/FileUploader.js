@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileText, Loader2 } from 'lucide-react';
 
-export default function FileUploader({ onExtractionSuccess }) {
+export default function FileUploader({ onExtract }) {
     const [file, setFile] = useState(null);
     const [password, setPassword] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -49,7 +49,7 @@ export default function FileUploader({ onExtractionSuccess }) {
             }
 
             // Pass the extracted data up to the parent page to display in the table
-            onExtractionSuccess(data);
+            onExtract(data);
 
         } catch (err) {
             setError(err.message);
@@ -96,7 +96,6 @@ export default function FileUploader({ onExtractionSuccess }) {
 
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-            {/* Submit Button */}
             <button
                 onClick={handleUpload}
                 disabled={!file || !password || isProcessing}

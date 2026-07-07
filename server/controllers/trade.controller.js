@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
 const Holding = require('../models/Holding');
+const ContractNote = require('../models/ContractNote')
 
 const executeTrades = async (req, res) => {
     try {
@@ -94,6 +95,29 @@ const executeTrades = async (req, res) => {
 
                 await holding.save();
             }
+        }
+
+        // Save the daily summary to ContractNote
+        const ContractNote = require('../models/ContractNote');
+        if (req.body.summary) {
+            const summary = req.body.summary;
+            const totalOtherTaxes = (summary.cgst || 0) + (summary.sgst || 0) + (summary.igst || 0) +
+                (summary.utt || 0) + (summary.sebiFees || 0) + (summary.stampDuty || 0) +
+                (summary.ipft || 0);
+
+            await ContractNote.findOneAndUpdate(
+                { tradeDate: req.body.tradeDate },
+                {
+                    tradeDate: req.body.tradeDate,
+                    dailyTurnover: summary.dailyTurnover || 0,
+                    totalBrokerage: summary.totalBrokerage || 0,
+                    totalSTT: summary.stt || 0,
+                    totalDPCharge: summary.dp || 0,
+                    totalOtherTaxes: totalOtherTaxes,
+                    netCashFlow: summary.finalNetCashFlow || 0,
+                },
+                { upsert: true, returnDocument: 'after' }
+            );
         }
 
         res.status(200).json({ message: 'Success! Trades executed and Database updated.' });

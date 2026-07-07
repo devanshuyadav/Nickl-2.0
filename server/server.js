@@ -25,6 +25,9 @@ app.get('/health', (req, res) => {
 const uploadRoutes = require('./routes/upload.routes');
 app.use('/api/upload', uploadRoutes);
 
+const contractNoteRoutes = require('./routes/contractNote.routes');
+app.use('/api/contract-notes', contractNoteRoutes);
+
 // Dashboard / Portfolio routes
 const dashboardRoutes = require('./routes/dashboard.routes');
 app.use('/api/portfolio', dashboardRoutes);

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Trash2, Loader2, Info } from 'lucide-react';
 
-export default function Settings({ onResetSuccess }) {
+export default function Settings() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState('');
 
@@ -22,7 +22,7 @@ export default function Settings({ onResetSuccess }) {
             // Briefly wait to show the loading state, then trigger success
             setTimeout(() => {
                 setIsDeleting(false);
-                onResetSuccess();
+                window.location.reload();
             }, 800);
 
         } catch (err) {
@@ -46,7 +46,6 @@ export default function Settings({ onResetSuccess }) {
                 </div>
             </div>
 
-            {/* The Danger Zone */}
             <div className="bg-red-50 p-6 rounded-xl border border-red-200 shadow-sm">
                 <h3 className="text-lg font-bold text-red-800 mb-2 flex items-center">
                     <AlertTriangle className="h-5 w-5 mr-2" /> Danger Zone
