@@ -171,16 +171,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
-                                <p className="text-xs font-bold uppercase text-gray-500 mb-1">Total Fees: ₹{selectedStock.chargesBreakdown.total.toFixed(2)}</p>
-                                <div className="text-xs text-gray-600 space-y-1 mt-2">
-                                    <div className="flex justify-between"><span>Brokerage:</span> <span className="font-medium">₹{selectedStock.chargesBreakdown.brokerage.toFixed(2)}</span></div>
-                                    <div className="flex justify-between"><span>STT:</span> <span className="font-medium">₹{selectedStock.chargesBreakdown.stt.toFixed(2)}</span></div>
-                                    <div className="flex justify-between"><span>DP Charges:</span> <span className="font-medium">₹{selectedStock.chargesBreakdown.dpCharges.toFixed(2)}</span></div>
-                                    <div className="flex justify-between"><span>Other:</span> <span className="font-medium">₹{selectedStock.chargesBreakdown.otherTaxes.toFixed(2)}</span></div>
-                                </div>
-                            </div>
-
+                            {/* REMOVED: Charges breakdown card */}
                             {/* Symbol Mapper Database Utility */}
                             <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex-grow">
                                 <p className="text-xs font-bold uppercase text-gray-500 mb-2">Yahoo Ticker Link</p>
