@@ -9,16 +9,8 @@ const transactionSchema = new mongoose.Schema({
     quantity: { type: Number, required: true },
     price: { type: Number, required: true }, // Pure share price
 
-    // The exact fees apportioned to this specific trade
-    brokerage: { type: Number, default: 0 },
-    stt: { type: Number, default: 0 },
-    otherTaxes: { type: Number, default: 0 },
-
-    grossValue: { type: Number },
-    // The Fully Loaded Value:
-    // BUY = (Qty * Price) + Brokerage + STT + Other Taxes
-    // SELL = (Qty * Price) - Brokerage - STT - Other Taxes
-    netValue: { type: Number, required: true },
+    grossValue: { type: Number, required: true }, // quantity * price
+    netValue: { type: Number, required: true },   // equals grossValue now
 
     // The FIFO Engine's Memory (Drops as you sell)
     remainingQuantity: { type: Number, required: true, default: 0 },
