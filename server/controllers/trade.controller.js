@@ -3,17 +3,17 @@ const Holding = require('../models/Holding');
 
 const executeTrades = async (req, res) => {
     try {
-        const { trades } = req.body;
-        console.log(trades);
+        const { transactions } = req.body;
+        console.log(transactions);
 
-        if (!trades || !Array.isArray(trades) || trades.length === 0) {
+        if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
             return res.status(400).json({ error: 'No trades provided for execution.' });
         }
 
         // We sort the trades by Date automatically, just in case the frontend sends a mixed batch
-        trades.sort((a, b) => new Date(a.tradeDate) - new Date(b.tradeDate));
+        transactions.sort((a, b) => new Date(a.tradeDate) - new Date(b.tradeDate));
 
-        for (const trade of trades) {
+        for (const trade of transactions) {
             let holding = await Holding.findOne({ isin: trade.isin });
             if (!holding) {
                 holding = new Holding({ isin: trade.isin, symbol: trade.symbol });
