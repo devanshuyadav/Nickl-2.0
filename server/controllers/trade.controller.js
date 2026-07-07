@@ -20,14 +20,24 @@ const executeTrades = async (req, res) => {
             }
 
             if (trade.type === 'BUY') {
-                const newTx = new Transaction({ ...trade, remainingQuantity: trade.quantity });
+                // Explicitly construct the transaction object – no fee fields.
+                const newTx = new Transaction({
+                    isin: trade.isin,
+                    symbol: trade.symbol,
+                    tradeDate: trade.tradeDate,
+                    type: 'BUY',
+                    quantity: trade.quantity,
+                    price: trade.price,
+                    grossValue: trade.grossValue,
+                    netValue: trade.netValue,       // equals grossValue now
+                    remainingQuantity: trade.quantity
+                });
                 await newTx.save();
 
                 holding.currentQuantity += trade.quantity;
                 holding.totalInvested += trade.netValue;
                 holding.averageBuyPrice = holding.totalInvested / holding.currentQuantity;
-                holding.totalBrokeragePaid += trade.brokerage;
-                holding.totalTaxesPaid += (trade.stt + trade.otherTaxes + (trade.dpCharges || 0));
+                // We NO LONGER update brokerage/taxes per holding.
 
                 await holding.save();
 
@@ -58,7 +68,18 @@ const executeTrades = async (req, res) => {
                     console.warn(`WARNING: Sold ${sharesToSell} more shares of ${trade.symbol} than found in DB. Cost basis for these shares will be calculated as 0.`);
                 }
 
-                const newTx = new Transaction({ ...trade, remainingQuantity: 0 });
+                // Explicitly construct the sell transaction – no fee fields.
+                const newTx = new Transaction({
+                    isin: trade.isin,
+                    symbol: trade.symbol,
+                    tradeDate: trade.tradeDate,
+                    type: 'SELL',
+                    quantity: trade.quantity,
+                    price: trade.price,
+                    grossValue: trade.grossValue,
+                    netValue: trade.netValue,       // equals grossValue now
+                    remainingQuantity: 0
+                });
                 await newTx.save();
 
                 const realizedNetPnL = trade.netValue - totalFullyLoadedCostOfSoldShares;
@@ -70,8 +91,6 @@ const executeTrades = async (req, res) => {
 
                 holding.realizedNetPnL = Number((holding.realizedNetPnL + realizedNetPnL).toFixed(2));
                 holding.realizedGrossPnL = Number((holding.realizedGrossPnL + realizedGrossPnL).toFixed(2));
-                holding.totalBrokeragePaid += trade.brokerage;
-                holding.totalTaxesPaid += (trade.stt + trade.otherTaxes + (trade.dpCharges || 0));
 
                 await holding.save();
             }
