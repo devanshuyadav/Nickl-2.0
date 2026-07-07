@@ -8,13 +8,13 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Interactive Panel State
     const [selectedStock, setSelectedStock] = useState(null);
-    const [marketData, setMarketData] = useState(null);
-    const [loadingMarket, setLoadingMarket] = useState(false);
+    // const [marketData, setMarketData] = useState(null);
+    // const [loadingMarket, setLoadingMarket] = useState(false);
+    const [transactionsData, setTransactionsData] = useState([]);      // 👈 NEW
+    const [loadingTransactions, setLoadingTransactions] = useState(false); // 👈 NEW
     const [showGlobalCharges, setShowGlobalCharges] = useState(false);
 
-    // Symbol Mapping State
     const [customTicker, setCustomTicker] = useState('');
     const [mapSuccess, setMapSuccess] = useState(false);
 
@@ -36,23 +36,35 @@ export default function Dashboard() {
     const handleRowClick = async (stock) => {
         if (selectedStock?.isin === stock.isin) {
             setSelectedStock(null);
-            setMarketData(null);
+            // setMarketData(null);
+            setTransactionsData([]);
             return;
         }
 
         setSelectedStock(stock);
-        setCustomTicker(''); // Reset custom ticker input
-        setLoadingMarket(true);
+        setCustomTicker('');
+        // setLoadingMarket(true);
+        setLoadingTransactions(true);
+        setTransactionsData([]);
 
         try {
-            const res = await fetch(`/api/market/chart/${stock.symbol}?days=30`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to fetch historical chart data');
-            setMarketData(data);
+            // Fetch chart data
+            // const chartRes = await fetch(`/api/market/chart/${stock.symbol}?days=30`);
+            // const chartData = await chartRes.json();
+            // if (!chartRes.ok) throw new Error(chartData.error || 'Failed to fetch historical chart data');
+            // setMarketData(chartData);
+
+            // 👇 NEW: Fetch transactions for this ISIN
+            const txRes = await fetch(`/api/portfolio/transactions/${stock.isin}`);
+            const txData = await txRes.json();
+            if (!txRes.ok) throw new Error(txData.error || 'Failed to fetch transactions');
+            setTransactionsData(txData);
+
         } catch (err) {
-            setMarketData({ error: err.message || 'Chart data unavailable right now.' });
+            // setMarketData({ error: err.message || 'Data unavailable.' });
         } finally {
-            setLoadingMarket(false);
+            // setLoadingMarket(false);
+            setLoadingTransactions(false);
         }
     };
 
@@ -69,8 +81,8 @@ export default function Dashboard() {
                 setMapSuccess(true);
                 setTimeout(() => {
                     setMapSuccess(false);
-                    fetchPortfolio(); // Reload dashboard to update live stats
-                    handleRowClick(selectedStock); // Reload chart data for the new ticker
+                    fetchPortfolio();
+                    handleRowClick(selectedStock); // reload transactions & chart
                 }, 1500);
             }
         } catch (err) {
@@ -81,6 +93,27 @@ export default function Dashboard() {
     if (loading) return <div className="flex justify-center mt-20"><Loader2 className="animate-spin h-8 w-8 text-blue-600" /></div>;
     if (error) return <div className="text-red-500 text-center mt-20">{error}</div>;
     if (!portfolio) return null;
+
+    // Helper to format date
+    const formatDate = (date) => {
+        const d = new Date(date);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    // Compute transaction summary for selected stock
+    const txSummary = transactionsData.reduce((acc, tx) => {
+        if (tx.type === 'BUY') {
+            acc.totalBuyQty += tx.quantity;
+            acc.totalBuyValue += tx.netValue;
+        } else {
+            acc.totalSellQty += tx.quantity;
+            acc.totalSellValue += tx.netValue;
+        }
+        return acc;
+    }, { totalBuyQty: 0, totalBuyValue: 0, totalSellQty: 0, totalSellValue: 0 });
+
+    const netQty = txSummary.totalBuyQty - txSummary.totalSellQty;
+    const netInvested = txSummary.totalBuyValue - txSummary.totalSellValue;
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -137,15 +170,12 @@ export default function Dashboard() {
 
             {/* Live Analysis Panel */}
             {selectedStock && (
-                <div className="bg-gradient-to-br from-blue-50 text-blue-900 to-indigo-50 p-6 rounded-xl border border-blue-100 shadow-sm">
+                <div className="bg-linear-to-br from-blue-50 text-blue-900 to-indigo-50 p-6 rounded-xl border border-blue-100 shadow-sm">
                     <div className="flex justify-between items-start mb-6">
                         <div>
                             <h2 className="text-2xl font-bold flex items-center">
                                 <PieChart className="h-6 w-6 mr-2 text-blue-600" /> {selectedStock.symbol}
                             </h2>
-                            <p className="text-sm opacity-80 mt-1">
-                                Shares: {selectedStock.currentQuantity} | Avg Cost: ₹{selectedStock.averageBuyPrice.toFixed(2)} | Live Price: ₹{selectedStock.livePrice.toLocaleString()}
-                            </p>
                         </div>
                         <button onClick={() => setSelectedStock(null)} className="text-blue-500 hover:text-blue-800 text-sm font-medium">Close Panel</button>
                     </div>
@@ -156,15 +186,14 @@ export default function Dashboard() {
                         <div className="space-y-4 lg:col-span-1 flex flex-col">
 
                             <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
-                                <p className="text-xs font-bold uppercase text-gray-500 mb-1">P&L Status</p>
                                 <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-2">
-                                    <span className="text-sm text-gray-600">Realized:</span>
+                                    <span className="text-gray-600">Realized P&L</span>
                                     <span className={`font-bold ${selectedStock.realizedNetPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {selectedStock.realizedNetPnL > 0 ? '+' : ''}₹{selectedStock.realizedNetPnL.toLocaleString()}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-600">Unrealized:</span>
+                                    <span className="text-gray-600">Unrealized P&L</span>
                                     <span className={`font-bold ${selectedStock.unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {selectedStock.unrealizedPnL > 0 ? '+' : ''}₹{selectedStock.unrealizedPnL.toLocaleString()}
                                     </span>
@@ -173,7 +202,7 @@ export default function Dashboard() {
 
                             {/* REMOVED: Charges breakdown card */}
                             {/* Symbol Mapper Database Utility */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex-grow">
+                            {/* <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex-grow">
                                 <p className="text-xs font-bold uppercase text-gray-500 mb-2">Yahoo Ticker Link</p>
                                 <div className="flex gap-2">
                                     <input
@@ -192,28 +221,84 @@ export default function Dashboard() {
                                     </button>
                                 </div>
                                 <p className="text-[10px] text-gray-400 mt-2 leading-tight">Update if market data is missing or incorrect (e.g. RELIANCE.NS).</p>
-                            </div>
+                            </div> */}
 
                         </div>
 
-                        {/* The Recharts Graph */}
-                        <div className="lg:col-span-3 bg-white p-4 rounded-lg shadow-sm border border-blue-100 relative min-h-[300px] flex flex-col">
-                            <p className="text-sm font-bold text-gray-600 mb-2">30-Day Trend</p>
-                            {loadingMarket ? (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <Loader2 className="animate-spin h-6 w-6 text-blue-500 mb-2" />
-                                    <p className="text-xs font-medium text-gray-500">Loading charts...</p>
+                        {/* Right side: Chart + Transaction Table */}
+                        <div className="lg:col-span-3 space-y-4">
+                            {/* Chart */}
+                            {/* <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 relative min-h-[200px] flex flex-col"> */}
+                            {/* <p className="text-sm font-bold text-gray-600 mb-2">30-Day Trend</p> */}
+                            {/* {loadingMarket ? (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <Loader2 className="animate-spin h-6 w-6 text-blue-500 mb-2" />
+                                        <p className="text-xs font-medium text-gray-500">Loading charts...</p>
+                                    </div>
+                                ) : marketData?.error ? (
+                                    <div className="flex flex-col items-center justify-center flex-grow text-center px-4">
+                                        <p className="text-red-500 text-sm font-medium mb-1">{marketData.error}</p>
+                                        <p className="text-gray-500 text-xs">Use the Ticker Link tool to update the symbol mapping.</p>
+                                    </div>
+                                ) : marketData && marketData.chartData ? (
+                                    <div className="flex-grow">
+                                        <StockChart data={marketData.chartData} symbol={selectedStock.symbol} />
+                                    </div>
+                                ) : null} */}
+                            {/* </div> */}
+
+                            {/* Transaction History Table */}
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
+                                <div className="flex justify-between items-center mb-3">
+                                    <p className="font-bold text-gray-600">Transaction History</p>
+                                    {loadingTransactions && <Loader2 className="animate-spin h-4 w-4 text-blue-500" />}
                                 </div>
-                            ) : marketData?.error ? (
-                                <div className="flex flex-col items-center justify-center flex-grow text-center px-4">
-                                    <p className="text-red-500 text-sm font-medium mb-1">{marketData.error}</p>
-                                    <p className="text-gray-500 text-xs">Use the Ticker Link tool to update the symbol mapping.</p>
+
+                                {/* Summary stats */}
+                                {transactionsData.length > 0 && (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-blue-50 p-3 rounded-md mb-3">
+                                        <div><span className="text-gray-500">Avg. Price</span> <br /><span className="font-bold">{selectedStock.currentQuantity === 0 ? "N/A" : '₹ ' + selectedStock.averageBuyPrice.toFixed(2)}</span></div>
+                                        <div><span className="text-gray-500">Current Holdings</span> <br /><span className="font-bold">{selectedStock.currentQuantity}</span></div>
+                                        <div><span className="text-gray-500">Net Invested</span> <br /><span className="font-bold">{selectedStock.currentQuantity === 0 ? "N/A" : '₹ ' + netInvested.toFixed(2)}</span></div>
+                                    </div>
+                                )}
+
+                                {/* Holdings Table */}
+                                <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                                    {loadingTransactions ? (
+                                        <p className="text-gray-500 text-center py-4">Loading transactions...</p>
+                                    ) : transactionsData.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-4">No transactions found for this stock.</p>
+                                    ) : (
+                                        <table className="w-full text-left text-gray-600">
+                                            <thead className="sticky top-0 bg-gray-100 text-sm text-gray-500 uppercase">
+                                                <tr>
+                                                    <th className="px-3 py-2">Type</th>
+                                                    <th className="px-3 py-2">Date</th>
+                                                    <th className="px-3 py-2 text-right">Qty</th>
+                                                    <th className="px-3 py-2 text-right">Avg. Price</th>
+                                                    <th className="px-3 py-2 text-right">Gross Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {transactionsData.map((tx, idx) => (
+                                                    <tr key={idx} className="text-sm border-b border-gray-100 hover:bg-gray-50">
+                                                        <td className="px-3 py-2">
+                                                            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${tx.type === 'BUY' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                                {tx.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-2 whitespace-nowrap">{formatDate(tx.tradeDate)}</td>
+                                                        <td className="px-3 py-2 text-right font-mono">{tx.quantity}</td>
+                                                        <td className="px-3 py-2 text-right font-mono">₹{tx.price.toFixed(2)}</td>
+                                                        <td className="px-3 py-2 text-right font-mono">₹{tx.grossValue.toFixed(2)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
                                 </div>
-                            ) : marketData && marketData.chartData ? (
-                                <div className="flex-grow">
-                                    <StockChart data={marketData.chartData} symbol={selectedStock.symbol} />
-                                </div>
-                            ) : null}
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -147,4 +147,19 @@ router.delete('/reset', async (req, res) => {
     }
 });
 
+// GET /api/portfolio/transactions/:isin
+router.get('/transactions/:isin', async (req, res) => {
+    try {
+        const { isin } = req.params;
+        console.log("hey");
+
+        console.log(isin);
+        const transactions = await Transaction.find({ isin }).sort({ tradeDate: 1 });
+        res.json(transactions);
+    } catch (error) {
+        console.error('Error fetching transactions:', error);
+        res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+});
+
 module.exports = router;
