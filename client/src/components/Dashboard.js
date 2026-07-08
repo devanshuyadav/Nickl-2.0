@@ -1,23 +1,25 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { TrendingUp, Wallet, Receipt, Loader2, Activity, ChevronDown, ChevronUp, PieChart, Check } from 'lucide-react';
+import { TrendingUp, Wallet, Receipt, Loader2, Activity, ChevronDown, ChevronUp, PieChart, Check, RefreshCw } from 'lucide-react';
 import StockChart from './StockChart';
 
 export default function Dashboard() {
     const [portfolio, setPortfolio] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false); // 👈 NEW
     const [error, setError] = useState('');
 
     const [selectedStock, setSelectedStock] = useState(null);
-    // const [marketData, setMarketData] = useState(null);
-    // const [loadingMarket, setLoadingMarket] = useState(false);
-    const [transactionsData, setTransactionsData] = useState([]);      // 👈 NEW
-    const [loadingTransactions, setLoadingTransactions] = useState(false); // 👈 NEW
+    const [marketData, setMarketData] = useState(null);
+    const [loadingMarket, setLoadingMarket] = useState(false);
+    const [transactionsData, setTransactionsData] = useState([]);
+    const [loadingTransactions, setLoadingTransactions] = useState(false);
     const [showGlobalCharges, setShowGlobalCharges] = useState(false);
 
     const [customTicker, setCustomTicker] = useState('');
     const [mapSuccess, setMapSuccess] = useState(false);
 
+    // eslint-disable-next-line react-hooks/immutability
     useEffect(() => { fetchPortfolio(); }, []);
 
     const fetchPortfolio = async () => {
@@ -30,40 +32,48 @@ export default function Dashboard() {
             setError(err.message);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
+    };
+
+    const handleRefresh = () => {
+        setRefreshing(true);
+        // Re-fetch portfolio data (and clear selection/transactions if desired)
+        setSelectedStock(null);
+        setTransactionsData([]);
+        fetchPortfolio();
     };
 
     const handleRowClick = async (stock) => {
         if (selectedStock?.isin === stock.isin) {
             setSelectedStock(null);
-            // setMarketData(null);
+            setMarketData(null);
             setTransactionsData([]);
             return;
         }
 
         setSelectedStock(stock);
         setCustomTicker('');
-        // setLoadingMarket(true);
+        setLoadingMarket(true);
         setLoadingTransactions(true);
         setTransactionsData([]);
 
         try {
             // Fetch chart data
-            // const chartRes = await fetch(`/api/market/chart/${stock.symbol}?days=30`);
-            // const chartData = await chartRes.json();
-            // if (!chartRes.ok) throw new Error(chartData.error || 'Failed to fetch historical chart data');
-            // setMarketData(chartData);
+            const chartRes = await fetch(`/api/market/chart/${stock.symbol}?days=30`);
+            const chartData = await chartRes.json();
+            if (!chartRes.ok) throw new Error(chartData.error || 'Failed to fetch historical chart data');
+            setMarketData(chartData);
 
-            // 👇 NEW: Fetch transactions for this ISIN
             const txRes = await fetch(`/api/portfolio/transactions/${stock.isin}`);
             const txData = await txRes.json();
             if (!txRes.ok) throw new Error(txData.error || 'Failed to fetch transactions');
             setTransactionsData(txData);
 
         } catch (err) {
-            // setMarketData({ error: err.message || 'Data unavailable.' });
+            setMarketData({ error: err.message || 'Data unavailable.' });
         } finally {
-            // setLoadingMarket(false);
+            setLoadingMarket(false);
             setLoadingTransactions(false);
         }
     };
@@ -82,7 +92,7 @@ export default function Dashboard() {
                 setTimeout(() => {
                     setMapSuccess(false);
                     fetchPortfolio();
-                    handleRowClick(selectedStock); // reload transactions & chart
+                    handleRowClick(selectedStock);
                 }, 1500);
             }
         } catch (err) {
@@ -94,13 +104,11 @@ export default function Dashboard() {
     if (error) return <div className="text-red-500 text-center mt-20">{error}</div>;
     if (!portfolio) return null;
 
-    // Helper to format date
     const formatDate = (date) => {
         const d = new Date(date);
         return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
-    // Compute transaction summary for selected stock
     const txSummary = transactionsData.reduce((acc, tx) => {
         if (tx.type === 'BUY') {
             acc.totalBuyQty += tx.quantity;
@@ -125,7 +133,15 @@ export default function Dashboard() {
                         <span className="flex items-center"><Wallet className="h-4 w-4 mr-2" /> Current Invested</span>
                     </div>
                     <div className="text-2xl font-bold text-gray-900">₹{portfolio.summary.totalInvested.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500 mt-2 font-medium">Valuation: ₹{portfolio.summary.totalCurrentValuation.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500 mt-2 font-medium">Total money invested</div>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+                    <div className="flex justify-between items-center text-gray-500 mb-2">
+                        <span className="flex items-center"><Wallet className="h-4 w-4 mr-2" /> Current Valudation</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900">₹{portfolio.summary.totalCurrentValuation.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500 mt-2 font-medium">Portfolio Net worth based on LTP</div>
                 </div>
 
                 <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
@@ -133,7 +149,7 @@ export default function Dashboard() {
                     <div className={`text-2xl font-bold ${portfolio.summary.totalRealizedNetPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         {portfolio.summary.totalRealizedNetPnL >= 0 ? '+' : ''}₹{portfolio.summary.totalRealizedNetPnL.toLocaleString()}
                     </div>
-                    <div className="text-xs text-gray-500 mt-2">Locked-in profit/loss</div>
+                    <div className="text-xs text-gray-500 mt-2">In-hand Profit/Loss</div>
                 </div>
 
                 <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
@@ -145,7 +161,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Total Charges (Interactive) */}
-                <div
+                {/* <div
                     onClick={() => setShowGlobalCharges(!showGlobalCharges)}
                     className="bg-gray-900 p-5 rounded-xl border border-gray-800 shadow-sm text-white cursor-pointer hover:bg-black transition-colors flex flex-col justify-between"
                 >
@@ -165,7 +181,7 @@ export default function Dashboard() {
                     ) : (
                         <div className="text-xs text-gray-400 mt-2">Click to see exact breakdown</div>
                     )}
-                </div>
+                </div> */}
             </div>
 
             {/* Live Analysis Panel */}
@@ -202,7 +218,7 @@ export default function Dashboard() {
 
                             {/* REMOVED: Charges breakdown card */}
                             {/* Symbol Mapper Database Utility */}
-                            {/* <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex-grow">
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex-grow">
                                 <p className="text-xs font-bold uppercase text-gray-500 mb-2">Yahoo Ticker Link</p>
                                 <div className="flex gap-2">
                                     <input
@@ -221,31 +237,31 @@ export default function Dashboard() {
                                     </button>
                                 </div>
                                 <p className="text-[10px] text-gray-400 mt-2 leading-tight">Update if market data is missing or incorrect (e.g. RELIANCE.NS).</p>
-                            </div> */}
+                            </div>
 
                         </div>
 
                         {/* Right side: Chart + Transaction Table */}
                         <div className="lg:col-span-3 space-y-4">
                             {/* Chart */}
-                            {/* <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 relative min-h-[200px] flex flex-col"> */}
-                            {/* <p className="text-sm font-bold text-gray-600 mb-2">30-Day Trend</p> */}
-                            {/* {loadingMarket ? (
+                            {/* <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 relative min-h-[200px] flex flex-col">
+                                <p className="text-sm font-bold text-gray-600 mb-2">30-Day Trend</p>
+                                {loadingMarket ? (
                                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                                         <Loader2 className="animate-spin h-6 w-6 text-blue-500 mb-2" />
                                         <p className="text-xs font-medium text-gray-500">Loading charts...</p>
                                     </div>
                                 ) : marketData?.error ? (
-                                    <div className="flex flex-col items-center justify-center flex-grow text-center px-4">
+                                    <div className="flex flex-col items-center justify-center text-center px-4">
                                         <p className="text-red-500 text-sm font-medium mb-1">{marketData.error}</p>
                                         <p className="text-gray-500 text-xs">Use the Ticker Link tool to update the symbol mapping.</p>
                                     </div>
                                 ) : marketData && marketData.chartData ? (
-                                    <div className="flex-grow">
+                                    <div>
                                         <StockChart data={marketData.chartData} symbol={selectedStock.symbol} />
                                     </div>
-                                ) : null} */}
-                            {/* </div> */}
+                                ) : null}
+                            </div> */}
 
                             {/* Transaction History Table */}
                             <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
@@ -304,11 +320,21 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Holdings Table */}
+            {/* Holdings Table with Refresh Button */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                     <h3 className="font-semibold text-gray-800">Your Assets</h3>
-                    <span className="text-xs text-gray-500 italic">Click any row for detailed analysis</span>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleRefresh}
+                            disabled={refreshing}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                            {refreshing ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                        <span className="text-xs text-gray-500 italic">Click any row for detailed analysis</span>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-600 min-w-[800px]">
@@ -316,6 +342,7 @@ export default function Dashboard() {
                             <tr>
                                 <th className="px-6 py-3">Symbol</th>
                                 <th className="px-6 py-3 text-right">Qty</th>
+                                <th className="px-6 py-3 text-right">LTP</th>
                                 <th className="px-6 py-3 text-right">Invested</th>
                                 <th className="px-6 py-3 text-right">Realized P&L</th>
                                 <th className="px-6 py-3 text-right">Unrealized P&L</th>
@@ -333,6 +360,7 @@ export default function Dashboard() {
                                         {selectedStock?.isin === stock.isin && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
                                     </td>
                                     <td className="px-6 py-4 text-right font-mono">{stock.currentQuantity}</td>
+                                    <td className="px-6 py-4 text-right font-mono">₹{stock.livePrice.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right">₹{stock.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                     <td className={`px-6 py-4 text-right font-bold ${stock.realizedNetPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {stock.realizedNetPnL > 0 ? '+' : ''}₹{stock.realizedNetPnL.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

@@ -4,7 +4,7 @@ const Holding = require('../models/Holding');
 const Transaction = require('../models/Transaction');
 const SymbolMap = require('../models/SymbolMap'); // Import the new model
 const YahooFinance = require('yahoo-finance2').default;
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
 
 // POST /api/portfolio/symbol-map - Update or create a mapping from the client
 router.post('/symbol-map', async (req, res) => {
@@ -17,11 +17,12 @@ router.post('/symbol-map', async (req, res) => {
         const map = await SymbolMap.findOneAndUpdate(
             { pdfSymbol: pdfSymbol.toUpperCase().trim() },
             { yahooSymbol: yahooSymbol.toUpperCase().trim() },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         res.status(200).json({ message: 'Symbol map updated successfully!', map });
     } catch (error) {
+        console.error('Symbol map update error:', error);
         res.status(500).json({ error: 'Failed to update symbol map.' });
     }
 });
@@ -70,7 +71,13 @@ router.get('/', async (req, res) => {
         }
 
         const quoteMap = {};
-        liveQuotes.forEach(q => { quoteMap[q.symbol] = q.regularMarketPrice; });
+        if (Array.isArray(liveQuotes) && liveQuotes.length > 0) {
+            liveQuotes.forEach(q => {
+                if (q && q.symbol && q.regularMarketPrice !== undefined) {
+                    quoteMap[q.symbol] = q.regularMarketPrice;
+                }
+            });
+        }
 
         // Portofolio calculations
         let totalInvested = 0, totalRealizedNetPnL = 0, totalUnrealizedPnL = 0, totalCurrentValuation = 0;
