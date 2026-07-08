@@ -218,7 +218,7 @@ export default function Dashboard() {
 
                             {/* REMOVED: Charges breakdown card */}
                             {/* Symbol Mapper Database Utility */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 flex-grow">
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
                                 <p className="text-xs font-bold uppercase text-gray-500 mb-2">Yahoo Ticker Link</p>
                                 <div className="flex gap-2">
                                     <input
@@ -337,7 +337,7 @@ export default function Dashboard() {
                     </div>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-600 min-w-[800px]">
+                    <table className="w-full text-sm text-left text-gray-600">
                         <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
                             <tr>
                                 <th className="px-6 py-3">Symbol</th>

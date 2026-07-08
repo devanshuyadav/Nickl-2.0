@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Holding = require('../models/Holding');
 const Transaction = require('../models/Transaction');
+const ContractNote = require('../models/ContractNote')
 const SymbolMap = require('../models/SymbolMap'); // Import the new model
 const YahooFinance = require('yahoo-finance2').default;
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] })
@@ -147,6 +148,7 @@ router.delete('/reset', async (req, res) => {
     try {
         await Holding.deleteMany({});
         await Transaction.deleteMany({});
+        await ContractNote.deleteMany({});
         res.status(200).json({ message: 'SUCCESS: Portfolio completely wiped.' });
     } catch (error) {
         console.error('Reset Error:', error);
