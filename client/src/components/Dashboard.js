@@ -191,6 +191,7 @@ export default function Dashboard() {
                         <div>
                             <h2 className="text-2xl font-bold flex items-center">
                                 <PieChart className="h-6 w-6 mr-2 text-blue-600" /> {selectedStock.symbol}
+                                <span className="ml-3 text-sm font-normal text-gray-900">{selectedStock.isin}</span>
                             </h2>
                         </div>
                         <button onClick={() => setSelectedStock(null)} className="text-blue-500 hover:text-blue-800 text-sm font-medium">Close Panel</button>
