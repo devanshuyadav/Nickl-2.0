@@ -140,7 +140,7 @@ export default function Dashboard() {
                     <div className="flex justify-between items-center text-gray-500 mb-2">
                         <span className="flex items-center"><Wallet className="h-4 w-4 mr-2" /> Current Valudation</span>
                     </div>
-                    <div className="text-2xl font-bold text-gray-900">₹{portfolio.summary.totalCurrentValuation.toLocaleString()}</div>
+                    <div className={`text-2xl font-bold ${portfolio.summary.totalCurrentValuation >= 0 ? 'text-green-600' : 'text-red-600'}`}>₹{portfolio.summary.totalCurrentValuation.toLocaleString()}</div>
                     <div className="text-xs text-gray-500 mt-2 font-medium">Portfolio Net worth based on LTP</div>
                 </div>
 
@@ -336,32 +336,36 @@ export default function Dashboard() {
                         <span className="text-xs text-gray-500 italic">Click any row for detailed analysis</span>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-auto max-h-96">
                     <table className="w-full text-sm text-left text-gray-600">
-                        <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
+                        <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b sticky top-0 z-10">
                             <tr>
+                                <th className="px-6 py-3">S. No.</th>
                                 <th className="px-6 py-3">Symbol</th>
-                                <th className="px-6 py-3 text-right">Qty</th>
-                                <th className="px-6 py-3 text-right">LTP</th>
                                 <th className="px-6 py-3 text-right">Invested</th>
+                                <th className="px-6 py-3 text-right">Qty</th>
+                                <th className="px-6 py-3 text-right">Avg. Price</th>
+                                <th className="px-6 py-3 text-right">LTP</th>
                                 <th className="px-6 py-3 text-right">Realized P&L</th>
                                 <th className="px-6 py-3 text-right">Unrealized P&L</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {portfolio.holdings.map((stock) => (
+                            {portfolio.holdings.map((stock, index) => (
                                 <tr
                                     key={stock.isin}
                                     onClick={() => handleRowClick(stock)}
                                     className={`border-b cursor-pointer transition-colors ${selectedStock?.isin === stock.isin ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                                 >
+                                    <td className="px-6 py-4 font-mono">{index + 1}</td>
                                     <td className="px-6 py-4 font-medium text-gray-900">
                                         {stock.symbol}
                                         {selectedStock?.isin === stock.isin && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
                                     </td>
-                                    <td className="px-6 py-4 text-right font-mono">{stock.currentQuantity}</td>
-                                    <td className="px-6 py-4 text-right font-mono">₹{stock.livePrice.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right">₹{stock.totalInvested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                    <td className="px-6 py-4 text-right font-mono">{stock.currentQuantity}</td>
+                                    <td className="px-6 py-4 text-right font-mono">₹{stock.averageBuyPrice.toFixed(2)}</td>
+                                    <td className="px-6 py-4 text-right font-mono">₹{stock.livePrice.toFixed(2)}</td>
                                     <td className={`px-6 py-4 text-right font-bold ${stock.realizedNetPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {stock.realizedNetPnL > 0 ? '+' : ''}₹{stock.realizedNetPnL.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </td>

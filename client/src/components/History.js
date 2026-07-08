@@ -49,6 +49,7 @@ export default function History() {
                     <table className="w-full text-gray-900 text-sm">
                         <thead className="bg-gray-50 uppercase text-xs border-b">
                             <tr>
+                                <th className="px-6 py-4 text-left">S. NO.</th>
                                 <th className="px-6 py-4 text-left">Trade Date</th>
                                 <th className="px-6 py-4 text-right">Turnover</th>
                                 <th className="px-6 py-4 text-right">Brokerage</th>
@@ -59,8 +60,9 @@ export default function History() {
                             </tr>
                         </thead>
                         <tbody>
-                            {notes.map((note) => (
+                            {notes.map((note, index) => (
                                 <tr key={note.tradeDate} className="border-b hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{index + 1}</td>
                                     <td className="px-6 py-4 font-medium text-gray-900">{formatDate(note.tradeDate)}</td>
                                     <td className="px-6 py-4 text-right font-mono">₹ {note.dailyTurnover.toFixed(2)}</td>
                                     <td className="px-6 py-4 text-right font-mono">₹ {note.totalBrokerage.toFixed(2)}</td>
