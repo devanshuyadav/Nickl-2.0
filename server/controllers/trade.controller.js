@@ -1,7 +1,6 @@
 const Transaction = require('../models/Transaction');
 const Holding = require('../models/Holding');
 
-
 const executeTrades = async (req, res) => {
     try {
         const { transactions } = req.body;
@@ -18,6 +17,71 @@ const executeTrades = async (req, res) => {
             });
         }
 
+        // ✅ VALIDATE SUFFICIENT QUANTITY FOR SELLS
+        const validationErrors = [];
+        const isinMap = {};
+
+        for (const trade of transactions) {
+            const isin = trade.isin;
+            const symbol = trade.symbol;
+
+            // Initialize tracking for this ISIN if not present
+            if (!isinMap[isin]) {
+                const holding = await Holding.findOne({ isin });
+                const currentQuantity = holding ? holding.currentQuantity : 0;
+                isinMap[isin] = {
+                    symbol,
+                    availableQuantity: currentQuantity,
+                    buysInBatch: 0,
+                    sellsInBatch: 0,
+                };
+            }
+
+            if (trade.type === 'BUY') {
+                isinMap[isin].availableQuantity += trade.quantity;
+                isinMap[isin].buysInBatch += trade.quantity;
+            } else if (trade.type === 'SELL') {
+                isinMap[isin].sellsInBatch += trade.quantity;
+                
+                // Check if this sell would exceed available quantity
+                if (trade.quantity > isinMap[isin].availableQuantity) {
+                    validationErrors.push({
+                        symbol,
+                        isin,
+                        sellQuantity: trade.quantity,
+                        availableQuantity: isinMap[isin].availableQuantity,
+                        deficit: trade.quantity - isinMap[isin].availableQuantity,
+                        buyInBatch: isinMap[isin].buysInBatch,
+                        sellInBatch: isinMap[isin].sellsInBatch,
+                    });
+                }
+                
+                // Decrease available quantity for subsequent sells (simulate FIFO)
+                isinMap[isin].availableQuantity -= trade.quantity;
+            }
+        }
+
+        // If there are validation errors, return detailed error
+        if (validationErrors.length > 0) {
+            const errorMessages = validationErrors.map(err => {
+                let message = `❌ ${err.symbol}: Cannot sell ${err.sellQuantity} shares. `;
+                
+                if (err.buyInBatch > 0) {
+                    message += `(You're buying ${err.buyInBatch} shares in this batch. `;
+                }
+                
+                message += `Available quantity: ${err.availableQuantity}. Need ${err.deficit} more shares.)`;
+                
+                return message;
+            });
+
+            return res.status(400).json({
+                error: 'Insufficient quantity to execute SELL trades.',
+                details: errorMessages,
+            });
+        }
+
+        // PROCEED WITH TRADE EXECUTION
         // We sort the trades by Date automatically, just in case the frontend sends a mixed batch
         transactions.sort((a, b) => new Date(a.tradeDate) - new Date(b.tradeDate));
 

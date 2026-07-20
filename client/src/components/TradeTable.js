@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle, Loader2, PlusCircle } from 'lucide-react';
 
 export default function TradeTable({ initialData, onReset }) {
@@ -17,10 +17,17 @@ export default function TradeTable({ initialData, onReset }) {
     const [manualType, setManualType] = useState('BUY');
     const [manualQty, setManualQty] = useState('');
     const [manualPrice, setManualPrice] = useState('');
+    const [manualDate, setManualDate] = useState('');
+
+    // Initialize with today's date when component mounts
+    useEffect(() => {
+        const today = new Date().toISOString().split('T')[0];
+        setManualDate(today);
+    }, []);
 
     const handleAddManualTrade = (e) => {
         e.preventDefault();
-        if (!manualSymbol || !manualQty || !manualPrice) return;
+        if (!manualSymbol || !manualQty || !manualPrice || !manualDate) return;
 
         const qty = Math.abs(Number(manualQty));
         const price = Math.abs(Number(manualPrice));
@@ -30,13 +37,12 @@ export default function TradeTable({ initialData, onReset }) {
         const newTrade = {
             isin: `${manualSymbol.toUpperCase()}_MANUAL`,
             symbol: manualSymbol.toUpperCase(),
-            tradeDate: initialData.tradeDate,
+            tradeDate: manualDate,
             type: manualType,
             quantity: qty,
             price: price,
             grossValue: grossValue,
             netValue: netValue,
-            // Fee fields are set to 0 (they are not used anymore)
             brokerage: 0,
             stt: 0,
             dpCharges: 0,
@@ -54,6 +60,7 @@ export default function TradeTable({ initialData, onReset }) {
 
         // Reset form completely
         setManualSymbol(''); setManualQty(''); setManualPrice('');
+        setManualType('BUY');
     };
 
     const handleConfirm = async () => {
@@ -76,12 +83,24 @@ export default function TradeTable({ initialData, onReset }) {
             const responseData = await res.json();
 
             if (!res.ok) {
+                if (res.status === 400 && responseData.error) {
+                    if (responseData.details && responseData.details.length > 0) {
+                        alert(`❌ ${responseData.error}\n\n${responseData.details.join('\n')}`);
+                    } else {
+                        alert(responseData.error);
+                    }
+                    setIsSaving(false);
+                    return;
+                }
+
+                // Handle duplicate (409)
                 if (res.status === 409) {
                     alert(responseData.error);
                     setIsSaving(false);
                     return;
                 }
-                throw new Error(data.error || 'Failed to save to database');
+
+                throw new Error(responseData.error || 'Failed to save to database');
             }
 
             setSaveStatus('success');
@@ -255,7 +274,7 @@ export default function TradeTable({ initialData, onReset }) {
                                         {trade.isin.includes('_MANUAL') && <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">MANUAL</span>}
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${trade.type === 'BUY' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${trade.type === 'BUY' ? 'bg-blue-100 text-gray-800' : 'bg-purple-100 text-purple-800'}`}>
                                             {trade.type}
                                         </span>
                                     </td>
@@ -270,36 +289,73 @@ export default function TradeTable({ initialData, onReset }) {
                 </div>
             </div>
 
-            {/* Expanded Manual Entry Section */}
-            <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm">
-                <h3 className="text-blue-900 font-bold mb-4 flex items-center">
-                    <PlusCircle className="h-5 w-5 mr-2 text-blue-600" />
+            {/* Manual Entry Section with Date */}
+            <div className="text-gray-900 bg-gray-50 p-6 rounded-xl border border-gray-100 shadow-sm">
+                <h3 className="text-gray-900 font-bold mb-4 flex items-center">
+                    <PlusCircle className="h-5 w-5 mr-2 text-gray-600" />
                     Add Missing Historical Trade
                 </h3>
                 <form onSubmit={handleAddManualTrade} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-800 mb-1">Symbol</label>
-                            <input type="text" placeholder="e.g. RELIANCE" value={manualSymbol} onChange={e => setManualSymbol(e.target.value)} className="w-full border border-blue-200 rounded p-2 text-sm uppercase focus:ring-blue-500 focus:border-blue-500" />
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-800 mb-1">Symbol</label>
+                            <input
+                                type="text"
+                                placeholder="e.g. RELIANCE"
+                                value={manualSymbol}
+                                onChange={e => setManualSymbol(e.target.value)}
+                                className="w-full border border-gray-200 rounded p-2 text-sm uppercase focus:ring-blue-500 focus:border-gray-500"
+                            />
                         </div>
                         <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-800 mb-1">Type</label>
-                            <select value={manualType} onChange={e => setManualType(e.target.value)} className="w-full border border-blue-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-800 mb-1">Type</label>
+                            <select
+                                value={manualType}
+                                onChange={e => setManualType(e.target.value)}
+                                className="w-full border border-gray-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-gray-500 bg-white"
+                            >
                                 <option value="BUY">BUY</option>
                                 <option value="SELL">SELL</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-800 mb-1">Quantity</label>
-                            <input type="number" placeholder="0" min="1" value={manualQty} onChange={e => setManualQty(e.target.value)} className="w-full border border-blue-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500" />
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-800 mb-1">Quantity</label>
+                            <input
+                                type="number"
+                                placeholder="0"
+                                min="1"
+                                value={manualQty}
+                                onChange={e => setManualQty(e.target.value)}
+                                className="w-full border border-gray-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-gray-500"
+                            />
                         </div>
                         <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-800 mb-1">Avg Price (₹)</label>
-                            <input type="number" placeholder="0.00" step="0.01" min="0.01" value={manualPrice} onChange={e => setManualPrice(e.target.value)} className="w-full border border-blue-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500" />
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-800 mb-1">Price (₹)</label>
+                            <input
+                                type="number"
+                                placeholder="0.00"
+                                step="0.01"
+                                min="0.01"
+                                value={manualPrice}
+                                onChange={e => setManualPrice(e.target.value)}
+                                className="w-full border border-gray-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-gray-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-800 mb-1">Trade Date</label>
+                            <input
+                                type="date"
+                                value={manualDate}
+                                onChange={e => setManualDate(e.target.value)}
+                                className="w-full border border-gray-200 rounded p-2 text-sm focus:ring-blue-500 focus:border-gray-500"
+                            />
                         </div>
                     </div>
                     <div className="flex justify-end">
-                        <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold tracking-wide hover:bg-blue-700 transition-colors">
+                        <button
+                            type="submit"
+                            className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold tracking-wide hover:bg-blue-700 transition-colors"
+                        >
                             Add to Ledger
                         </button>
                     </div>
